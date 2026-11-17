@@ -5,18 +5,20 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "tsc && tsc -p tsconfig.research.json && vite build",
     "preview": "vite preview",
     "format": "prettier --write ."
   },
   "devDependencies": {
     "@types/node": "^26.6.6",
+    "mupdf": "^1.28.6",
     "playwright-core": "^1.65.1",
     "prettier": "^3.10.1",
     "typescript": "~7.0.2",
     "vite": "^8.3.5"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^1.10.0",
     "@chenglou/pretext": "^1.0.0",
     "@fontsource-variable/jetbrains-mono": "^5.3.0",
     "@fontsource/ibm-plex-sans-arabic": "^5.3.0"

@@ -3,11 +3,12 @@ import { resolve } from "node:path"
 import { defineConfig } from "vite"
 
 export default defineConfig({
-  base: "/spaceship/",
+  base: "./",
   build: {
     rollupOptions: {
       input: {
         main: resolve(import.meta.dirname, "index.html"),
+        research: resolve(import.meta.dirname, "research/index.html"),
         ...Object.fromEntries(
           readdirSync(resolve(import.meta.dirname, "extra"))
             .filter((file) => file.endsWith(".html"))

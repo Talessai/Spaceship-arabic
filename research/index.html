@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>مختبر البحث</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #000;
+        --ink: #fff;
+        --ink-2: rgb(255 255 255 / 0.64);
+        --ink-4: rgb(255 255 255 / 0.22);
+        --hot: #ff5a1f;
+        --gap: 16px;
+        --line: 26px;
+        background: var(--bg);
+        color: var(--ink);
+        font:
+          15px / var(--line) "JetBrains Mono Variable",
+          "IBM Plex Sans Arabic",
+          monospace;
+      }
+      body {
+        margin: 0;
+        padding: var(--gap);
+        display: grid;
+        grid-template-columns: minmax(240px, 1fr) 3fr;
+        gap: calc(var(--gap) * 2);
+        align-items: start;
+      }
+      header {
+        grid-column: 1 / -1;
+        display: flex;
+        gap: var(--gap);
+        align-items: baseline;
+        justify-content: space-between;
+      }
+      h1,
+      h2 {
+        font-size: inherit;
+        margin: 0;
+      }
+      aside,
+      main,
+      form,
+      details[open] {
+        display: grid;
+        gap: var(--gap);
+      }
+      button,
+      input,
+      textarea {
+        font: inherit;
+      }
+      textarea {
+        inline-size: 100%;
+        box-sizing: border-box;
+        unicode-bidi: plaintext;
+      }
+      ul,
+      ol {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+        display: grid;
+        gap: var(--gap);
+      }
+      li,
+      blockquote,
+      .gap {
+        unicode-bidi: plaintext;
+      }
+      small,
+      output,
+      cite {
+        color: var(--ink-2);
+        font-style: normal;
+      }
+      blockquote {
+        margin: 0;
+        padding-inline-start: var(--gap);
+        border-inline-start: 1px solid var(--ink-4);
+        color: var(--ink-2);
+      }
+      #claims li {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 0 var(--gap);
+
+        & > :not(input) {
+          grid-column: 2;
+        }
+        &[data-unverified] {
+          color: var(--hot);
+        }
+      }
+      .gap {
+        border: 1px dashed var(--hot);
+        padding: var(--gap);
+        margin: 0;
+      }
+      .actions {
+        display: flex;
+        gap: var(--gap);
+        align-items: baseline;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>مختبر البحث: الكتابة من مصادرك فقط</h1>
+      <a id="mode" href="?live=true">محاكاة ← تشغيل النموذج</a>
+    </header>
+
+    <aside>
+      <h2>المصادر</h2>
+      <label>
+        أضف ملفات ماركداون أو نص
+        <input id="source-files" type="file" multiple accept=".md,.txt,text/markdown,text/plain" />
+      </label>
+      <details>
+        <summary>أو الصق نصاً</summary>
+        <form id="paste-source">
+          <input name="title" placeholder="عنوان المصدر" required />
+          <textarea name="text" rows="6" placeholder="نص المصدر" required></textarea>
+          <button>أضف المصدر</button>
+        </form>
+      </details>
+      <output id="source-note"></output>
+      <ul id="source-list"></ul>
+      <details id="key" hidden>
+        <summary>مفتاح النموذج</summary>
+        <form id="key-form" autocomplete="off">
+          <input name="key" type="password" placeholder="مفتاح Claude" dir="ltr" />
+          <button>احفظ</button>
+        </form>
+      </details>
+    </aside>
+
+    <main>
+      <h2>المسودة</h2>
+      <textarea id="draft" rows="12" placeholder="اكتب هنا، أو اطلب فقرة من المصادر في الأسفل."></textarea>
+      <form id="request">
+        <input name="instruction" placeholder="ماذا تريد أن تكتب الآن؟ اتركه فارغاً ليكمل من آخر المسودة." />
+        <div class="actions">
+          <button>اكتب من المصادر</button>
+          <button id="stop" type="button" disabled>أوقف</button>
+          <output id="status"></output>
+        </div>
+      </form>
+
+      <ol id="claims"></ol>
+      <div class="actions">
+        <button id="accept" type="button" disabled>أضف المحدد إلى المسودة</button>
+        <small>الجملة التي لا يوجد اقتباسها حرفياً في المصادر لا يمكن إضافتها.</small>
+      </div>
+
+      <h2>المراجع</h2>
+      <ol id="references"></ol>
+      <div class="actions">
+        <button id="download" type="button">نزّل المسودة</button>
+        <button id="clear" type="button">امسح المسودة والمراجع</button>
+      </div>
+    </main>
+
+    <template id="source-item">
+      <li>
+        <b></b>
+        <small></small>
+        <button type="button">احذف</button>
+      </li>
+    </template>
+    <template id="claim-item">
+      <li>
+        <input type="checkbox" aria-label="أضف هذه الجملة" />
+        <span></span>
+        <blockquote></blockquote>
+        <cite></cite>
+      </li>
+    </template>
+    <template id="reference-item">
+      <li>
+        <span></span>
+        <blockquote></blockquote>
+      </li>
+    </template>
+
+    <script type="module" src="/src/research/main.ts"></script>
+  </body>
+</html>
