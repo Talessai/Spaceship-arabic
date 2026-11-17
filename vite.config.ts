@@ -8,6 +8,7 @@ export default defineConfig({
     rollupOptions: {
       input: {
         main: resolve(import.meta.dirname, "index.html"),
+        research: resolve(import.meta.dirname, "research/index.html"),
         ...Object.fromEntries(
           readdirSync(resolve(import.meta.dirname, "extra"))
             .filter((file) => file.endsWith(".html"))

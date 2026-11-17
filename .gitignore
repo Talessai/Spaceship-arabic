@@ -31,3 +31,6 @@ token-usage.log
 
 # written by scripts/capture
 .capture
+
+# converted sources, written by scripts/sources/pdf-to-markdown.mjs
+/sources

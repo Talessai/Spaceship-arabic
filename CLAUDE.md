@@ -22,3 +22,14 @@ Arabic version of [chuanqisun/spaceship](https://github.com/chuanqisun/spaceship
 ## Checking direction changes
 
 Run `npm run dev -- --port 5280`, then drive the page in sim mode with Playwright (`playwright-core` is a dev dependency): drag `#pointer` left and down, double-click it for attention boxes, and double-click and hold for the fan. Take screenshots and look at them. Type checks alone do not catch RTL layout bugs.
+
+## Research page (`research/`)
+
+A separate page for writing research from the user's own sources only. It shares nothing with the story page except fonts and `src/llm/cerebras.ts`.
+
+- `scripts/sources/pdf-to-markdown.mjs`: PDF to Markdown with `<!-- page N -->` markers, written to `sources/` (git-ignored). Arabic lines are rebuilt from glyph positions, which repairs reversed ligatures, tatweel and run order. Pages with unmapped glyphs are marked `needs-ocr`; there is no OCR step yet. Tables and multi-box layouts come out in poor order.
+- `src/research/sources.ts`: Markdown to passages that keep their page. `retrieval.ts`: BM25 over normalized words, so no cross-language search yet.
+- `src/research/writer.ts`: the `Writer` seam (simulated and live) and `checked`, which looks each quote up in the passages. A sentence whose quote is not found cannot be added to the draft. The code checks that the quote exists, not that the sentence follows from it.
+- `live-writer.ts` has not been run against a model yet. Sources are not kept across reloads; the draft and references are, in localStorage.
+
+Check it at `/spaceship/research/` with Playwright. Pass files to `setInputFiles` as `{ name, mimeType, buffer }`: paths with Arabic names do not fire the change event here.
