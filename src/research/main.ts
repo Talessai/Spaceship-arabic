@@ -6,6 +6,7 @@ import { KEY_STORAGE } from "../llm/claude.ts"
 import { liveWriter } from "./live-writer.ts"
 import { createIndex } from "./retrieval.ts"
 import { simulatedWriter } from "./simulated-writer.ts"
+import { removeStoredSource, storedSources, storeSource } from "./source-store.ts"
 import { MAX_SOURCES, MIN_SOURCES, sourceOf, type Source } from "./sources.ts"
 import { checked, type CheckedClaim, type Gap } from "./writer.ts"
 
@@ -27,6 +28,8 @@ const referenceList = $<HTMLOListElement>("#references")
 const status = $<HTMLOutputElement>("#status")
 const stop = $<HTMLButtonElement>("#stop")
 const accept = $<HTMLButtonElement>("#accept")
+const keyStatus = $<HTMLOutputElement>("#key-status")
+const forgetKey = $<HTMLButtonElement>("#forget-key")
 
 let sources: Source[] = []
 let index = createIndex([])
@@ -37,6 +40,11 @@ let controller: AbortController | undefined
 restoreDraft()
 showSources()
 showMode()
+showKey()
+storedSources().then((stored) => {
+  sources = [...stored, ...sources.filter(({ title }) => !stored.some((source) => source.title === title))]
+  showSources()
+}, reportStorageError)
 
 $<HTMLInputElement>("#source-files").addEventListener("change", async ({ currentTarget }) => {
   const input = currentTarget as HTMLInputElement
@@ -54,8 +62,17 @@ $<HTMLFormElement>("#paste-source").addEventListener("submit", (event) => {
 
 $<HTMLFormElement>("#key-form").addEventListener("submit", (event) => {
   event.preventDefault()
-  localStorage.setItem(KEY_STORAGE, String(new FormData(event.currentTarget as HTMLFormElement).get("key")).trim())
-  status.value = "حُفظ المفتاح في هذا المتصفح."
+  const form = event.currentTarget as HTMLFormElement
+  const key = String(new FormData(form).get("key")).trim()
+  if (!key) return
+  localStorage.setItem(KEY_STORAGE, key)
+  form.reset()
+  showKey()
+})
+
+forgetKey.addEventListener("click", () => {
+  localStorage.removeItem(KEY_STORAGE)
+  showKey()
 })
 
 $<HTMLFormElement>("#request").addEventListener("submit", (event) => {
@@ -80,6 +97,18 @@ function addSource(title: string, markdown: string) {
   const source = sourceOf(title, markdown)
   sources = [...sources.filter((existing) => existing.title !== title), source]
   showSources()
+  storeSource(source).catch(reportStorageError)
+}
+
+/** The page still works for this visit when the browser refuses storage, as in a private window. */
+function reportStorageError() {
+  sourceNote.value = `${sourceNote.value} تعذّر حفظ المصادر في هذا المتصفح، فستبقى لهذه الزيارة فقط.`
+}
+
+function showKey() {
+  const isStored = Boolean(localStorage.getItem(KEY_STORAGE))
+  keyStatus.value = isStored ? "المفتاح محفوظ في هذا المتصفح." : "لا يوجد مفتاح محفوظ."
+  forgetKey.hidden = !isStored
 }
 
 function showSources() {
@@ -94,6 +123,7 @@ function showSources() {
       item.querySelector("button")!.addEventListener("click", () => {
         sources = sources.filter((existing) => existing !== source)
         showSources()
+        removeStoredSource(source.title).catch(reportStorageError)
       })
       return item
     }),
