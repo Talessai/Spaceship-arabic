@@ -100,6 +100,28 @@
           color: var(--hot);
         }
       }
+      fieldset {
+        display: grid;
+        gap: var(--gap);
+        border: 1px solid var(--ink-4);
+        margin: 0;
+      }
+      fieldset label {
+        display: grid;
+        grid-template-columns: 10ch 1fr;
+        gap: var(--gap);
+        align-items: center;
+      }
+      .scale {
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        gap: var(--gap);
+        align-items: center;
+        color: var(--ink-2);
+      }
+      li button {
+        justify-self: start;
+      }
       .gap {
         border: 1px dashed var(--hot);
         padding: var(--gap);
@@ -137,6 +159,10 @@
         }
         #draft {
           min-block-size: 40vh;
+        }
+        fieldset label {
+          grid-template-columns: minmax(0, 1fr);
+          gap: 0;
         }
       }
     </style>
@@ -186,6 +212,50 @@
         </div>
       </form>
 
+      <form id="controls">
+        <fieldset>
+          <legend>التوجيه</legend>
+          <label>
+            <span>الرسمية</span>
+            <span class="scale"
+              >مبسّط <input type="range" name="الرسمية" min="-2" max="2" value="0" data-low="مبسّط" data-high="أكاديمي رسمي" /> أكاديمي رسمي</span
+            >
+          </label>
+          <label>
+            <span>الادعاء</span>
+            <span class="scale">جازم <input type="range" name="الادعاء" min="-2" max="2" value="0" data-low="جازم" data-high="متحفظ" /> متحفظ</span>
+          </label>
+          <label>
+            <span>التفصيل</span>
+            <span class="scale">موجز <input type="range" name="التفصيل" min="-2" max="2" value="0" data-low="موجز" data-high="مفصّل" /> مفصّل</span>
+          </label>
+          <label>
+            <span>الصياغة</span>
+            <span class="scale"
+              >حرة
+              <input type="range" name="الصياغة" min="-2" max="2" value="0" data-low="إعادة صياغة حرة" data-high="قريبة من عبارة المصدر" />
+              قريبة من المصدر</span
+            >
+          </label>
+          <label>
+            <span>نوع الفقرة</span>
+            <select name="نوع الفقرة">
+              <option value="">تلقائي</option>
+              <option>وصف</option>
+              <option>تحليل</option>
+              <option>مقارنة</option>
+              <option>نقد</option>
+            </select>
+          </label>
+          <small id="controls-note"></small>
+        </fieldset>
+      </form>
+
+      <section id="pinned-section" hidden>
+        <h2>مقاطع مثبّتة: يُبنى عليها ما يُكتب بعدها</h2>
+        <ul id="pinned"></ul>
+      </section>
+
       <ol id="claims"></ol>
       <div class="actions">
         <button id="accept" type="button" disabled>أضف المحدد إلى المسودة</button>
@@ -213,6 +283,14 @@
         <span></span>
         <blockquote></blockquote>
         <cite></cite>
+        <button type="button">ثبّت هذا المقطع</button>
+      </li>
+    </template>
+    <template id="pinned-item">
+      <li>
+        <cite></cite>
+        <blockquote></blockquote>
+        <button type="button">أزل التثبيت</button>
       </li>
     </template>
     <template id="reference-item">

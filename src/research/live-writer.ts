@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk"
 import { claudeClient, storedClaudeKey } from "../llm/claude.ts"
+import { controlLine } from "./controls.ts"
 import type { Claim, Gap, Writer, WriteRequest } from "./writer.ts"
 
 const MODEL = "claude-opus-5-5"
@@ -13,6 +14,8 @@ You help a researcher write from their own sources. The user message holds the s
 The researcher will only keep sentences that cite a document, because an unsupported sentence in a thesis is worse than a missing one. So use the documents alone: no outside knowledge, and no fact, name, number, date or reference that a document does not state.
 
 Write the next 2 to 5 sentences of the draft that answer the request, as plain prose without headings, lists or markdown. Write in the language of the draft, or of the request when the draft is empty; a document may be in another language. Every sentence must cite the document that supports it.
+
+The user message may also hold two optional sections. PINNED names the documents the researcher fixed in place: build the sentences on those first, and use the others to complete them. CONTROLS sets how the sentences read, one axis per line with the direction to move in and sometimes how far in parentheses; with no strength, follow it plainly. Controls change wording, order and emphasis only. They never license a claim the documents do not make: a more assertive tone still states only what a document states.
 
 When the documents do not support the request, or support only part of it, leave the gap open: write the supported sentences, if any, then end with these two lines.
 
@@ -55,8 +58,18 @@ function documentsOf({ passages }: WriteRequest): Anthropic.Beta.BetaRequestDocu
   }))
 }
 
-function taskOf({ draft, instruction }: WriteRequest) {
-  return `REQUEST\n${instruction || "Continue the draft."}\n\nDRAFT\n${draft.slice(-DRAFT_TAIL_CHARS)}`
+/** Empty sections are left out, header included. */
+function taskOf({ draft, instruction, pinned, controls }: WriteRequest) {
+  const sections = [
+    ["PINNED", pinned ? `documents 1 to ${pinned}` : ""],
+    ["CONTROLS", controls.map(controlLine).join("\n")],
+    ["REQUEST", instruction || "Continue the draft."],
+    ["DRAFT", draft.slice(-DRAFT_TAIL_CHARS) || "(empty)"],
+  ]
+  return sections
+    .filter(([, body]) => body)
+    .map(([header, body]) => `${header}\n${body}`)
+    .join("\n\n")
 }
 
 /** A cited block is a claim; uncited prose is a claim with no quote, which the check then rejects, unless it only joins two cited blocks. */
