@@ -47,6 +47,11 @@
       details[open] {
         display: grid;
         gap: var(--gap);
+        min-inline-size: 0;
+      }
+      li,
+      blockquote {
+        overflow-wrap: anywhere;
       }
       button,
       input,
@@ -102,8 +107,37 @@
       }
       .actions {
         display: flex;
+        flex-wrap: wrap;
         gap: var(--gap);
         align-items: baseline;
+      }
+      /* On a phone the sources stack above the draft, and controls grow to a thumb's size. Text fields stay at 16px so iOS does not zoom on focus. */
+      @media (max-width: 720px) {
+        body {
+          grid-template-columns: minmax(0, 1fr);
+          gap: var(--gap);
+        }
+        header {
+          flex-direction: column;
+        }
+        button,
+        input,
+        textarea {
+          font-size: 16px;
+        }
+        button,
+        input:not([type="checkbox"]) {
+          min-block-size: 44px;
+          box-sizing: border-box;
+          max-inline-size: 100%;
+        }
+        input[type="checkbox"] {
+          inline-size: 24px;
+          block-size: 24px;
+        }
+        #draft {
+          min-block-size: 40vh;
+        }
       }
     </style>
   </head>
