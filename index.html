@@ -2,6 +2,7 @@
 <html lang="ar">
   <head>
     <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
     <title>سفينة الفضاء</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🕹️</text></svg>" />
     <style>
@@ -852,6 +853,33 @@
         }
         &[data-steer="pulling"] .vector-label b {
           color: var(--hot);
+        }
+      }
+      /* On a phone the column takes the width: the rail is dropped, and the gutters keep only the room a knob and a short label need. */
+      @media (max-width: 720px) {
+        :root {
+          --rail-width: 0px;
+          --margin: 12px;
+          --gutter: 104px;
+          --padding: 20px;
+          --tray-height: 28px;
+          --numeral-size: 10px;
+          --knob: 20px;
+          --knob-future: 16px;
+          overscroll-behavior: none;
+        }
+        #rail {
+          display: none;
+        }
+        /* The right gutter holds the future knobs and their wrapped labels; the left one, with no rail, only keeps the text off the edge. */
+        #text {
+          width: calc(100% - var(--margin) - var(--gutter));
+          margin-left: var(--margin);
+          margin-right: var(--gutter);
+        }
+        #tray {
+          justify-content: flex-start;
+          overflow-x: auto;
         }
       }
     </style>

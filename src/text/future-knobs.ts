@@ -535,7 +535,7 @@ export function createFutureKnobs({
     const strength = strengthOf(knob)
     const value = valueOf({ dimension, position: positionOf(knob) })
     const percent = `${Math.round(strength * 100)}%`
-    const realized = knob.confidence === undefined ? "" : `${Math.round(knob.confidence * 100)}%${knob.pinned ? "" : " realized"}`
+    const realized = knob.confidence === undefined ? "" : `${Math.round(knob.confidence * 100)}%${knob.pinned ? "" : " تحقّق"}`
     const isRealizing = knob.tracking !== undefined || knob.pinned !== undefined
     element.style.setProperty("--fill", `${isRealizing ? (knob.confidence ?? 0) : strength}`)
     element.toggleAttribute("data-tracking", knob.tracking !== undefined)

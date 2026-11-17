@@ -14,6 +14,10 @@ Arabic version of [chuanqisun/spaceship](https://github.com/chuanqisun/spaceship
 - The rail stays left of the column, at the line ends. Pinned future knobs stay in the right gutter, beside each sentence's start.
 - The simulator, story openings, dimensions, tray and dialog are in Arabic. Story prompts ask for Modern Standard Arabic, and the live dimension catalog is in Arabic.
 
+## Phones
+
+Below 720px the story page drops the rail, keeps a narrow left margin and a wider right gutter (`--gutter`) for future knobs and their wrapped labels, and enlarges the knobs. The phone rules sit at the end of the stylesheet so they override the rules above them. Touch already drives the page through pointer events. Check with Playwright's `iPhone 13` device and CDP `Input.dispatchTouchEvent`: drag `#pointer`, double tap it, and double tap and hold for the fan.
+
 ## Status
 
 - Phase 1, direction: done and checked with Playwright screenshots in sim mode.
