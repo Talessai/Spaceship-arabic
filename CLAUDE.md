@@ -32,4 +32,4 @@ A separate page for writing research from the user's own sources only. It shares
 - `src/research/writer.ts`: the `Writer` seam (simulated and live) and `checked`, which looks each quote up in the passages. A sentence whose quote is not found cannot be added to the draft. The code checks that the quote exists, not that the sentence follows from it.
 - `live-writer.ts` calls Claude through `@anthropic-ai/sdk` from the browser (`src/llm/claude.ts`), with each passage sent as a document with citations on. It has not been run against the API yet. The SDK's types pull in Node's, which change `setTimeout` for the story page, so the research page is type-checked on its own with `tsconfig.research.json`. Sources are not kept across reloads; the draft and references are, in localStorage.
 
-Check it at `/spaceship/research/` with Playwright. Pass files to `setInputFiles` as `{ name, mimeType, buffer }`: paths with Arabic names do not fire the change event here.
+Check it at `/research/` with Playwright. Pass files to `setInputFiles` as `{ name, mimeType, buffer }`: paths with Arabic names do not fire the change event here.
