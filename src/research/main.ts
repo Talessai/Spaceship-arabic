@@ -3,11 +3,12 @@ import "@fontsource/ibm-plex-sans-arabic/400.css"
 import "@fontsource/ibm-plex-sans-arabic/600.css"
 import { $ } from "../dom.ts"
 import { KEY_STORAGE } from "../llm/claude.ts"
+import { controlsOf } from "./controls.ts"
 import { liveWriter } from "./live-writer.ts"
 import { createIndex } from "./retrieval.ts"
 import { simulatedWriter } from "./simulated-writer.ts"
 import { removeStoredSource, storedSources, storeSource } from "./source-store.ts"
-import { MAX_SOURCES, MIN_SOURCES, sourceOf, type Source } from "./sources.ts"
+import { MAX_SOURCES, MIN_SOURCES, sourceOf, type Passage, type Source } from "./sources.ts"
 import { checked, type CheckedClaim, type Gap } from "./writer.ts"
 
 const DRAFT_STORAGE = "research-draft"
@@ -30,11 +31,14 @@ const stop = $<HTMLButtonElement>("#stop")
 const accept = $<HTMLButtonElement>("#accept")
 const keyStatus = $<HTMLOutputElement>("#key-status")
 const forgetKey = $<HTMLButtonElement>("#forget-key")
+const controls = $<HTMLFormElement>("#controls")
+const pinnedList = $<HTMLUListElement>("#pinned")
 
 let sources: Source[] = []
 let index = createIndex([])
 let references: Reference[] = []
 let offered: CheckedClaim[] = []
+let pinned: Passage[] = []
 let controller: AbortController | undefined
 
 restoreDraft()
@@ -113,6 +117,7 @@ function showKey() {
 
 function showSources() {
   index = createIndex(sources.flatMap(({ passages }) => passages))
+  showPinned()
   sourceList.replaceChildren(
     ...sources.map((source) => {
       const item = cloneOf("#source-item")
@@ -138,7 +143,8 @@ async function write(instruction: string) {
   controller?.abort()
   controller = new AbortController()
   const { signal } = controller
-  const passages = index.search(instruction || draft.value.slice(-QUERY_TAIL_CHARS), PASSAGES_PER_REQUEST).map(({ passage }) => passage)
+  const found = index.search(instruction || draft.value.slice(-QUERY_TAIL_CHARS), PASSAGES_PER_REQUEST).map(({ passage }) => passage)
+  const passages = [...pinned, ...found.filter((passage) => !pinned.includes(passage))].slice(0, PASSAGES_PER_REQUEST)
   offered = []
   claimList.replaceChildren()
   accept.disabled = true
@@ -151,7 +157,7 @@ async function write(instruction: string) {
   stop.disabled = false
   status.value = `يكتب من ${passages.length} مقاطع…`
   try {
-    for await (const result of writer({ draft: draft.value, instruction, passages }, signal)) {
+    for await (const result of writer({ draft: draft.value, instruction, passages, pinned: pinned.length, controls: controlsOf(controls) }, signal)) {
       if (result.kind === "gap") showGap(result)
       else showClaim(checked(result, passages))
     }
@@ -174,7 +180,30 @@ function showClaim(claim: CheckedClaim) {
   item.querySelector("blockquote")!.textContent = claim.quote
   item.querySelector("cite")!.textContent = claim.cited ? `${claim.cited.source}، ص ${claim.cited.page}` : "هذا الاقتباس غير موجود حرفياً في المصادر."
   item.toggleAttribute("data-unverified", !claim.cited)
+  const pin = item.querySelector("button")!
+  pin.hidden = !claim.cited
+  pin.addEventListener("click", () => {
+    if (!pinned.includes(claim.cited!)) pinned = [...pinned, claim.cited!]
+    showPinned()
+  })
   claimList.append(item)
+}
+
+function showPinned() {
+  pinned = pinned.filter((passage) => sources.some(({ passages }) => passages.includes(passage)))
+  $("#pinned-section").hidden = !pinned.length
+  pinnedList.replaceChildren(
+    ...pinned.map((passage) => {
+      const item = cloneOf("#pinned-item")
+      item.querySelector("cite")!.textContent = `${passage.source}، ص ${passage.page}`
+      item.querySelector("blockquote")!.textContent = passage.text
+      item.querySelector("button")!.addEventListener("click", () => {
+        pinned = pinned.filter((existing) => existing !== passage)
+        showPinned()
+      })
+      return item
+    }),
+  )
 }
 
 function showGap({ missing, searchTerms }: Gap) {
@@ -240,6 +269,7 @@ function showMode() {
   mode.textContent = isLive ? "النموذج يعمل ← العودة إلى المحاكاة" : "محاكاة ← تشغيل النموذج"
   mode.href = isLive ? "?" : "?live=true"
   $("#key").hidden = !isLive
+  $("#controls-note").textContent = isLive ? "" : "في وضع المحاكاة تُنسخ الجمل من المصادر كما هي، فالتوجيه لا يغيّرها. شغّل النموذج لترى أثره."
 }
 
 function cloneOf(template: string) {
