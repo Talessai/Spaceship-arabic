@@ -1,85 +1,110 @@
-import { storedApiKey, streamCompletion } from "../llm/cerebras.ts"
+import Anthropic from "@anthropic-ai/sdk"
+import { claudeClient, storedClaudeKey } from "../llm/claude.ts"
 import type { Claim, Gap, Writer, WriteRequest } from "./writer.ts"
 
+const MODEL = "claude-opus-5-5"
 const DRAFT_TAIL_CHARS = 1500
+/** Uncited text this short between two cited sentences is a connective, not a claim of its own. */
+const MAX_CONNECTIVE_WORDS = 4
 
 const SYSTEM_PROMPT = `
-You help write a research text using ONLY the numbered PASSAGES in the user message. You know nothing else: never use outside knowledge, never invent a fact, name, number, date or reference.
+You help a researcher write from their own sources. The user message holds the sources as documents, then a REQUEST and the end of the DRAFT so far.
 
-Write the next 2 to 5 sentences of the DRAFT that answer the REQUEST. Write in the language of the draft, or of the request when the draft is empty. Each sentence must be fully supported by one passage. For every sentence output exactly two lines:
+The researcher will only keep sentences that cite a document, because an unsupported sentence in a thesis is worse than a missing one. So use the documents alone: no outside knowledge, and no fact, name, number, date or reference that a document does not state.
 
-S: the sentence
-Q: [passage number] an exact, unbroken copy of 5 to 25 consecutive words from that passage that support the sentence, in the passage's own language, unchanged
+Write the next 2 to 5 sentences of the draft that answer the request, as plain prose without headings, lists or markdown. Write in the language of the draft, or of the request when the draft is empty; a document may be in another language. Every sentence must cite the document that supports it.
 
-A passage may be in another language than the draft: write the sentence in the draft's language and copy the quote in the passage's language.
+When the documents do not support the request, or support only part of it, leave the gap open: write the supported sentences, if any, then end with these two lines.
 
-If the passages do not support an answer, or support only part of it, do not fill the gap. Output these two lines instead of, or after, the supported sentences:
-
-MISSING: what evidence is missing, as the kind of source that would hold it (for example a field study of X after year Y), in the draft's language. Never name a specific title or author.
-SEARCH: 3 to 6 search keywords for finding such a source
-
-Output only these lines. No markdown, no commentary.
-
-EXAMPLE
-User:
-PASSAGES
-[1] يعيش سكان قطر أساساً في البحر، ويجوبون مياهه طيلة نصف العام بحثاً عن اللؤلؤ، والنصف الآخر في التجارة.
-[2] The town had two mosques and a small square fort.
-
-REQUEST
-اكتب عن مصادر دخل السكان وعدد سكان المدينة.
-
-DRAFT
-Assistant:
-S: اعتمد سكان قطر في معيشتهم على البحر، فكانوا يقضون نصف العام في الغوص على اللؤلؤ.
-Q: [1] ويجوبون مياهه طيلة نصف العام بحثاً عن اللؤلؤ
-S: أما النصف الآخر من العام فكانوا يقضونه في التجارة.
-Q: [1] والنصف الآخر في التجارة
-MISSING: لا تذكر المقاطع عدد سكان المدينة؛ يلزم مصدر إحصائي أو تقرير رحالة يقدّر عدد السكان في تلك الفترة.
-SEARCH: عدد سكان الدوحة القرن التاسع عشر تقديرات
+MISSING: what evidence is missing, described as the kind of source that would hold it (for example a field study of X after year Y), in the draft's language. Do not name a specific title or author, since you cannot check that it exists.
+SEARCH: 3 to 6 keywords for finding such a source
 `.trim()
 
+type Block = Anthropic.Beta.BetaContentBlock
+
+/** Each passage goes in as its own document with citations on, so every cited sentence comes back with the passage's exact words and its number. */
 export const liveWriter: Writer = async function* (request, signal) {
-  const apiKey = storedApiKey()
-  if (!apiKey) throw new Error("احفظ مفتاح النموذج أولاً")
+  const apiKey = storedClaudeKey()
+  if (!apiKey) throw new Error("احفظ مفتاح Claude أولاً")
 
-  const deltas = streamCompletion({ apiKey, system: SYSTEM_PROMPT, user: userMessageOf(request), temperature: 0.2, maxCompletionTokens: 3000, signal })
-  let sentence = ""
-  let missing = ""
-  for await (const line of linesOf(deltas)) {
-    const [, label, body] = line.match(/^\s*(S|Q|MISSING|SEARCH):\s*(.*)$/) ?? []
-    if (!body) continue
-    if (label === "S") sentence = body
-    if (label === "MISSING") missing = body
-    if (label === "Q" && sentence) {
-      const claim = claimOf(sentence, body)
-      if (claim) yield claim
-      sentence = ""
+  const message = await claudeClient(apiKey)
+    .beta.messages.stream(
+      {
+        model: MODEL,
+        max_tokens: 16000,
+        output_config: { effort: "medium" },
+        betas: ["server-side-fallback-2026-07-01"],
+        fallbacks: "default",
+        system: SYSTEM_PROMPT,
+        messages: [{ role: "user", content: [...documentsOf(request), { type: "text", text: taskOf(request) }] }],
+      },
+      { signal },
+    )
+    .finalMessage()
+
+  if (message.stop_reason === "refusal") throw new Error("رفض النموذج هذا الطلب.")
+  yield* resultsOf(message.content)
+}
+
+function documentsOf({ passages }: WriteRequest): Anthropic.Beta.BetaRequestDocumentBlock[] {
+  return passages.map(({ source, page, text }) => ({
+    type: "document",
+    source: { type: "text", media_type: "text/plain", data: text },
+    title: `${source}، ص ${page}`,
+    citations: { enabled: true },
+  }))
+}
+
+function taskOf({ draft, instruction }: WriteRequest) {
+  return `REQUEST\n${instruction || "Continue the draft."}\n\nDRAFT\n${draft.slice(-DRAFT_TAIL_CHARS)}`
+}
+
+/** A cited block is a claim; uncited prose is a claim with no quote, which the check then rejects, unless it only joins two cited blocks. */
+function* resultsOf(content: Block[]): Generator<Claim | Gap> {
+  let claim: Claim | undefined
+  let uncited = ""
+  for (const block of content) {
+    if (block.type !== "text") continue
+    const citation = block.citations?.find((citation) => citation.type === "char_location")
+    if (!citation) {
+      uncited += block.text
+      continue
     }
-    if (label === "SEARCH" && missing) {
-      yield { kind: "gap", missing, searchTerms: body } satisfies Gap
-      missing = ""
+    const { prose } = partsOf(uncited)
+    const isConnective = wordCount(prose) <= MAX_CONNECTIVE_WORDS
+    if (claim && !isConnective) {
+      yield claim
+      yield { kind: "claim", sentence: prose.trim(), passage: -1, quote: "" }
+      claim = undefined
     }
+    const lead = isConnective ? prose : ""
+    if (claim && endsSentence(claim.sentence + lead)) {
+      yield { ...claim, sentence: (claim.sentence + lead).trim() }
+      claim = undefined
+    }
+    const sentence = claim ? claim.sentence + lead + block.text : (lead + block.text).trimStart()
+    claim = { kind: "claim", sentence, passage: claim?.passage ?? citation.document_index, quote: claim?.quote ?? citation.cited_text.trim() }
+    uncited = ""
   }
-  if (missing) yield { kind: "gap", missing, searchTerms: "" }
+
+  const { prose, gap } = partsOf(uncited)
+  if (claim) yield { ...claim, sentence: (claim.sentence + (wordCount(prose) <= MAX_CONNECTIVE_WORDS ? prose : "")).trim() }
+  if (wordCount(prose) > MAX_CONNECTIVE_WORDS) yield { kind: "claim", sentence: prose.trim(), passage: -1, quote: "" }
+  if (gap) yield gap
 }
 
-function claimOf(sentence: string, citation: string): Claim | undefined {
-  const [, number, quote] = citation.match(/^\[(\d+)\]\s*(.+)$/) ?? []
-  if (quote) return { kind: "claim", sentence, passage: Number(number) - 1, quote: quote.replace(/^["«“]|["»”]$/g, "") }
+/** Splits uncited text into its prose and the MISSING and SEARCH lines, if any. */
+function partsOf(text: string): { prose: string; gap?: Gap } {
+  const missing = text.match(/^\s*MISSING:\s*(.+)$/m)?.[1]
+  const searchTerms = text.match(/^\s*SEARCH:\s*(.+)$/m)?.[1] ?? ""
+  const prose = text.replace(/^\s*(MISSING|SEARCH):.*$/gm, "").replace(/\s+/g, " ")
+  return { prose: prose.trim() ? prose : "", gap: missing ? { kind: "gap", missing: missing.trim(), searchTerms: searchTerms.trim() } : undefined }
 }
 
-function userMessageOf({ draft, instruction, passages }: WriteRequest) {
-  const numbered = passages.map(({ text }, i) => `[${i + 1}] ${text}`).join("\n")
-  return `PASSAGES\n${numbered}\n\nREQUEST\n${instruction || "Continue the draft."}\n\nDRAFT\n${draft.slice(-DRAFT_TAIL_CHARS)}`
+function endsSentence(text: string) {
+  return /[.!?؟]["»”)]?\s*$/.test(text)
 }
 
-async function* linesOf(deltas: AsyncIterable<string>) {
-  let buffer = ""
-  for await (const delta of deltas) {
-    const lines = (buffer + delta).split("\n")
-    buffer = lines.pop()!
-    yield* lines
-  }
-  yield buffer
+function wordCount(text: string) {
+  return text.match(/\S+/g)?.length ?? 0
 }
