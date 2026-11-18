@@ -16,7 +16,7 @@ Arabic version of [chuanqisun/spaceship](https://github.com/chuanqisun/spaceship
 
 ## Phones
 
-Below 720px the story page drops the rail, keeps a narrow left margin and a wider right gutter (`--gutter`) for future knobs and their wrapped labels, and enlarges the knobs. The phone rules sit at the end of the stylesheet so they override the rules above them. Touch already drives the page through pointer events. Check with Playwright's `iPhone 13` device and CDP `Input.dispatchTouchEvent`: drag `#pointer`, double tap it, and double tap and hold for the fan.
+Below 720px the story page drops the rail, keeps a narrow left margin and a wider right gutter (`--gutter`) for future knobs and their wrapped labels, and enlarges the knobs. The phone rules sit at the end of the stylesheet so they override the rules above them. Touch drives the page through pointer events. Double presses go through `src/text/double-press.ts`, which reads a finger's double tap from pointer events because not every phone browser sends `dblclick` for touch; `hold.ts` gives touch wider tolerances than a mouse. To test that path, drop native `dblclick` events in an init script. Check with Playwright's `iPhone 13` device and CDP `Input.dispatchTouchEvent`: drag `#pointer`, double tap it, and double tap and hold for the fan.
 
 ## Status
 

@@ -1,6 +1,10 @@
 import { circleOf, distance } from "./links.ts"
 
 const STILL_TOLERANCE_PX = 4
+/** A finger rolls as it rests, lands its second tap farther off, and covers more than the knob, so touch gets more room for each. */
+const TOUCH_STILL_TOLERANCE_PX = 14
+const TOUCH_DOUBLE_PRESS_PX = 32
+const TOUCH_SWEEP_RADIUS_PX = 28
 /** Keeps a slow click from flashing the start of the sweep. */
 const SWEEP_DELAY_MS = 100
 /** A second press counts as part of a double press only this close to the first. */
@@ -34,7 +38,9 @@ export function onPressAndHold(
     const previous = lastPress
     lastPress = { at: event.timeStamp, x: event.pageX, y: event.pageY }
     const isSecondPress =
-      previous !== undefined && event.timeStamp - previous.at <= (secondPressWithin ?? 0) && distance(previous, lastPress) <= DOUBLE_PRESS_PX
+      previous !== undefined &&
+      event.timeStamp - previous.at <= (secondPressWithin ?? 0) &&
+      distance(previous, lastPress) <= (isTouch(event) ? TOUCH_DOUBLE_PRESS_PX : DOUBLE_PRESS_PX)
     if (secondPressWithin !== undefined && !isSecondPress) return
     press = { start: event, latest: event, controller: new AbortController(), isSweeping: false }
     sweep(press)
@@ -43,7 +49,10 @@ export function onPressAndHold(
     if (!press) return
     press.latest = event
     const { start, isSweeping } = press
-    const { center, radius } = isSweeping ? circleOf(element) : { center: { x: start.pageX, y: start.pageY }, radius: STILL_TOLERANCE_PX }
+    const circle = circleOf(element)
+    const { center, radius } = isSweeping
+      ? { center: circle.center, radius: isTouch(start) ? Math.max(circle.radius, TOUCH_SWEEP_RADIUS_PX) : circle.radius }
+      : { center: { x: start.pageX, y: start.pageY }, radius: isTouch(start) ? TOUCH_STILL_TOLERANCE_PX : STILL_TOLERANCE_PX }
     if (distance({ x: event.pageX, y: event.pageY }, center) > radius) release()
   })
   for (const type of ["pointerup", "pointercancel", "lostpointercapture"]) element.addEventListener(type, release)
@@ -68,6 +77,10 @@ export function onPressAndHold(
     press?.controller.abort()
     press = undefined
   }
+}
+
+function isTouch({ pointerType }: PointerEvent) {
+  return pointerType !== "mouse"
 }
 
 /** Yields progress once per animation frame, staying at 0 for `delayMs` then reaching 1 over `ms`; stops early once `signal` aborts. */

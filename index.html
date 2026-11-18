@@ -864,8 +864,8 @@
           --padding: 20px;
           --tray-height: 28px;
           --numeral-size: 10px;
-          --knob: 20px;
-          --knob-future: 16px;
+          --knob: 28px;
+          --knob-future: 22px;
           overscroll-behavior: none;
         }
         #rail {
@@ -876,6 +876,13 @@
           width: calc(100% - var(--margin) - var(--gutter));
           margin-left: var(--margin);
           margin-right: var(--gutter);
+        }
+        /* A long press must not open the browser's own menu or start a selection under the finger. */
+        .knob,
+        #text {
+          -webkit-touch-callout: none;
+          -webkit-user-select: none;
+          user-select: none;
         }
         #tray {
           justify-content: flex-start;

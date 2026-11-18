@@ -8,6 +8,7 @@ import { createAttentionKnobs } from "./attention-knobs.ts"
 import { caretAt, isAhead, pointAt, type Caret, type TextMetrics } from "./caret.ts"
 import { simulatedSource } from "./completion.ts"
 import { createConnections } from "./connections.ts"
+import { onDoublePress } from "./double-press.ts"
 import { makeDraggable } from "./drag.ts"
 import { createFutureKnobs } from "./future-knobs.ts"
 import { onPressAndHold } from "./hold.ts"
@@ -132,7 +133,7 @@ soundToggle.addEventListener("click", () => {
 })
 
 // A quick double click expands or collapses; one whose second press was held opened the fan menu instead.
-handle.addEventListener("dblclick", () => (didHold ? (didHold = false) : detachAllOrExpand()))
+onDoublePress(handle, () => (didHold ? (didHold = false) : detachAllOrExpand()))
 handle.addEventListener("pointerenter", ({ buttons, pageX }) => buttons || sounds.knobHover(pageX))
 handle.addEventListener("pointerdown", ({ pageX }) => {
   didHold = false

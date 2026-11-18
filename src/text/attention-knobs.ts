@@ -1,5 +1,6 @@
 import type { Point } from "../point.ts"
 import { startAttention, type AttentionBox, type AttentionGeneration, type AttentionSource, type Lead } from "./attention.ts"
+import { onDoublePress } from "./double-press.ts"
 import { makeDraggable } from "./drag.ts"
 import { circleOf, distance, linkBetween, pathOf } from "./links.ts"
 import { wordSpans, type Span } from "./segments.ts"
@@ -60,7 +61,7 @@ export function createAttentionKnobs({ source, textElement, knob, linkPath, acti
     hover(grabbed ?? boxes[index])
   })
   textElement.addEventListener("pointerleave", () => hover(grabbed))
-  textElement.addEventListener("dblclick", (event) => {
+  onDoublePress(textElement, (event) => {
     if (deleteBox(boxAt(pointOf(event)))) sounds.remove(event.pageX)
   })
   document.addEventListener("pointerup", boxSelection)
