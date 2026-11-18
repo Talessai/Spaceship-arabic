@@ -4,6 +4,8 @@ import "@fontsource/ibm-plex-sans-arabic/400.css"
 import "@fontsource/ibm-plex-sans-arabic/600.css"
 import { $ } from "../dom.ts"
 import { centeredAt, type Point } from "../point.ts"
+import { storeToolText } from "../research/draft-store.ts"
+import { createResearchSources } from "../research/tool-source.ts"
 import { createAttentionKnobs } from "./attention-knobs.ts"
 import { caretAt, isAhead, pointAt, type Caret, type TextMetrics } from "./caret.ts"
 import { simulatedSource } from "./completion.ts"
@@ -42,6 +44,7 @@ import { isRtl } from "./reading-direction.ts"
 const DWELL_MS = 100
 /** Generated words kept ready past the knob: whenever fewer remain, the stream continues the text, appending, never rewriting. */
 const BUFFER_WORDS = 300
+const RESEARCH_BUFFER_WORDS = 60
 /** A top-up that adds no words (the source failed or said nothing) is retried after this long, doubling each time up to `MAX_RETRY_MS`. */
 const RETRY_MS = 1000
 const MAX_RETRY_MS = 16000
@@ -62,6 +65,7 @@ const soundToggle = $<HTMLButtonElement>("#sound-toggle")
 const modeToggle = $<HTMLButtonElement>("#mode-toggle")
 const extraLink = $<HTMLAnchorElement>("#extra-link")
 const railElement = $("#rail")
+const noticeElement = $<HTMLOutputElement>("#notice")
 const style = getComputedStyle(element)
 /** Fonts load per script, so the Arabic face is asked for by sample text before pretext measures with it. */
 await Promise.all([document.fonts.load(style.font), document.fonts.load(style.font, "أبجد")])
@@ -69,13 +73,17 @@ await Promise.all([document.fonts.load(style.font), document.fonts.load(style.fo
 const measure = document.createElement("canvas").getContext("2d")!
 measure.font = style.font
 
-const isLive = new URLSearchParams(location.search).get("live") === "true"
-const stream = createTextStream(isLive ? liveSource : simulatedSource, render)
+const query = new URLSearchParams(location.search)
+const isLive = query.get("live") === "true"
+/** Research mode writes from the researcher's stored sources. Every top-up is a paid request, so far fewer words are kept ready past the knob. */
+const research = query.get("research") === "true" ? createResearchSources((notice) => (noticeElement.value = notice)) : undefined
+const bufferWords = research ? RESEARCH_BUFFER_WORDS : BUFFER_WORDS
+const stream = createTextStream(research?.text ?? (isLive ? liveSource : simulatedSource), render)
 const rail = createLeftRail(railElement)
 const connections = createConnections({ source: isLive ? liveInfluence : simulatedInfluence, onChange: refreshRail })
 const relevance = createKeywordRelevance(isLive ? liveRelevance : simulatedRelevance, refreshRail)
 const attention = createAttentionKnobs({
-  source: isLive ? liveAttention : simulatedAttention,
+  source: research?.attention ?? (isLive ? liveAttention : simulatedAttention),
   textElement: element,
   knob: handle,
   linkPath: $<SVGPathElement>("#attention-links"),
@@ -94,7 +102,7 @@ const futureKnobs = createFutureKnobs({
   linkPath: $<SVGPathElement>("#future-links"),
   tunedLinkPath: $<SVGPathElement>("#future-tuned-link"),
   hud: $<SVGGElement>("#future-hud"),
-  source: isLive ? liveDimension : simulatedDimension,
+  source: research?.dimension ?? (isLive ? liveDimension : simulatedDimension),
   realization: isLive ? liveRealization : simulatedRealization,
   textElement: element,
   context: () => ({ text: shownText, leads: attention.leads() }),
@@ -124,7 +132,8 @@ let didHold = false
 /** The previous drag point, for how fast the knob moves. */
 let lastDrag: { point: Point; at: number } | undefined
 
-bindModeToggle(modeToggle, $<HTMLDialogElement>("#live-keys"), isLive)
+if (research) showResearchMode()
+else bindModeToggle(modeToggle, $<HTMLDialogElement>("#live-keys"), isLive)
 startSound()
 showSoundToggle()
 soundToggle.addEventListener("click", () => {
@@ -196,7 +205,7 @@ function moveTo(target: Point) {
 /** The knob rests once it has not moved for `DWELL_MS`; the text past it is then generated again if a drag back discarded it. */
 function restartRest() {
   clearTimeout(restTimer)
-  restTimer = setTimeout(() => {
+  restTimer = window.setTimeout(() => {
     restCount = shownCount ?? 0
     isRegenerationHeld = false
     topUp()
@@ -239,6 +248,7 @@ function render() {
   if (element.textContent !== story.content) element.textContent = story.content
   connections.update(story)
   shownText = text
+  if (research) storeToolText(text)
   attention.update(text)
   futureKnobs.follow(story)
   report()
@@ -257,7 +267,7 @@ function report() {
   const activity = stream.activity()
   const buffer = Math.max(0, countWords(stream.text) - (shownCount ?? 0))
   handle.toggleAttribute("data-generating", activity.isGenerating)
-  handle.style.setProperty("--buffer", `${Math.min(1, buffer / BUFFER_WORDS)}`)
+  handle.style.setProperty("--buffer", `${Math.min(1, buffer / bufferWords)}`)
   showStatus(statusElement, {
     ...activity,
     words: shownCount ?? 0,
@@ -271,7 +281,7 @@ function report() {
 function restartDwell() {
   clearTimeout(dwellTimer)
   const dwell = ++dwellCount
-  dwellTimer = setTimeout(() => {
+  dwellTimer = window.setTimeout(() => {
     if (isFutureStale) regenerateFuture()
     else topUp()
     afterStreaming(() => {
@@ -305,7 +315,7 @@ function steering(): Steering {
  * Asked after every change, but run on the next task, after a finished generation has reported how it went.
  */
 function scheduleTopUp() {
-  topUpTimer ??= setTimeout(() => {
+  topUpTimer ??= window.setTimeout(() => {
     topUpTimer = undefined
     topUp()
   })
@@ -314,7 +324,7 @@ function scheduleTopUp() {
 function topUp() {
   if (isRegenerationHeld || stream.activity().isGenerating || performance.now() < retryAt) return
   const words = countWords(stream.text)
-  if (words - (shownCount ?? 0) >= BUFFER_WORDS) return
+  if (words - (shownCount ?? 0) >= bufferWords) return
   stream.generate("buffer low", steering()).then(
     (outcome) => outcome === "done" && settleTopUp(words),
     (error) => (console.error(error), settleTopUp(words)),
@@ -329,8 +339,15 @@ function settleTopUp(wordsBefore: number) {
     return scheduleTopUp()
   }
   retryAt = performance.now() + retryMs
-  setTimeout(scheduleTopUp, retryMs)
+  window.setTimeout(scheduleTopUp, retryMs)
   retryMs = Math.min(retryMs * 2, MAX_RETRY_MS)
+}
+
+/** In research mode the tray's mode button leads back to the research page, where sources, key and topic are set. */
+function showResearchMode() {
+  modeToggle.setAttribute("aria-pressed", "true")
+  modeToggle.querySelector("b")!.textContent = "بحث"
+  modeToggle.addEventListener("click", () => location.assign("research/"))
 }
 
 function prepareWords() {

@@ -4,8 +4,8 @@ import type { Passage } from "./sources.ts"
 
 const MIN_QUOTE_WORDS = 3
 
-/** `passages` starts with the `pinned` ones the researcher fixed in place, which the next sentences build on first. */
-export type WriteRequest = { draft: string; instruction: string; passages: Passage[]; pinned: number; controls: Control[] }
+/** `passages` starts with the `pinned` ones the researcher fixed in place, which the next sentences build on first; `leads` are phrases of the draft to develop. */
+export type WriteRequest = { draft: string; instruction: string; passages: Passage[]; pinned: number; leads: string[]; controls: Control[] }
 
 /** A sentence for the draft with the words of a passage it rests on, or what the passages lack to write one. */
 export type Claim = { kind: "claim"; sentence: string; passage: number; quote: string }

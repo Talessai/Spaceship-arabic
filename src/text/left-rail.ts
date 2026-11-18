@@ -165,7 +165,7 @@ export function createLeftRail(element: HTMLElement) {
     clearTimeout(markTimers.get(node))
     markTimers.set(
       node,
-      setTimeout(() => node.removeAttribute(attribute), ms),
+      window.setTimeout(() => node.removeAttribute(attribute), ms),
     )
   }
 

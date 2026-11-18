@@ -69,7 +69,7 @@ export function createConnections({ source, onChange }: ConnectionsOptions) {
     clearTimeout(timer)
     if (!target || cache.has(target.key) || pending?.key === target.key) return
     const scheduled = target
-    timer = setTimeout(() => score(scheduled), scheduled.kind === "box" ? BOX_DELAY_MS : TIP_DELAY_MS)
+    timer = window.setTimeout(() => score(scheduled), scheduled.kind === "box" ? BOX_DELAY_MS : TIP_DELAY_MS)
   }
 
   async function score({ key, kind, focus, spans, sentences, question }: Target) {
