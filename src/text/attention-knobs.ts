@@ -54,6 +54,10 @@ export function createAttentionKnobs({ source, textElement, knob, linkPath, acti
   textElement.addEventListener("mousedown", (event) => {
     if (boxAt(pointOf(event)) !== -1) event.preventDefault()
   })
+  /** Where the column lets a finger scroll the page, a touch that lands on a box still drags the box. */
+  textElement.addEventListener("touchstart", (event) => boxAt({ x: event.touches[0].pageX, y: event.touches[0].pageY }) !== -1 && event.preventDefault(), {
+    passive: false,
+  })
   textElement.addEventListener("pointermove", (event) => {
     pointerX = event.pageX
     const index = boxAt(pointOf(event))

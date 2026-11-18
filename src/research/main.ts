@@ -93,6 +93,7 @@ $("#clear").addEventListener("click", () => {
 })
 $("#take-tool-text").addEventListener("click", () => {
   draft.value = [draft.value.trimEnd(), storedToolText()].filter(Boolean).join("\n\n")
+  showReferences()
   saveDraft()
 })
 $("#open-tool").addEventListener("click", () => {

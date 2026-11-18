@@ -551,10 +551,6 @@
           display: none;
         }
       }
-      #research-link {
-        margin-inline-start: var(--gap);
-        color: inherit;
-      }
       #tray {
         position: fixed;
         inset: auto 0 0;
@@ -633,6 +629,8 @@
       }
       #mode-toggle,
       #sound-toggle,
+      #copy-text,
+      #research-link,
       #extra-link {
         padding: 0 var(--gap);
         border: none;
@@ -888,12 +886,17 @@
           --knob-future: 22px;
           overscroll-behavior: none;
         }
+        /* Room below the text to drag the knob into, and to scroll the last lines clear of the bars. */
+        body {
+          padding-bottom: 70vh;
+        }
         #rail {
           display: none;
         }
         /* The right gutter holds the future knobs and their wrapped labels; the left one, with no rail, only keeps the text off the edge. */
         #text {
           width: calc(100% - var(--margin) - var(--gutter));
+          touch-action: pan-y;
           margin-left: var(--margin);
           margin-right: var(--gutter);
         }
@@ -936,6 +939,7 @@
       <output id="status" aria-live="off"></output>
       <button id="sound-toggle" type="button" aria-pressed="true" aria-label="الصوت">♪<b>يعمل</b></button>
       <a id="extra-link" href="extra/style-1.html">إضافات</a>
+      <button id="copy-text" type="button" hidden>نسخ</button>
       <a id="research-link" href="research/">بحث</a>
     </footer>
     <output id="notice" dir="rtl" aria-live="polite"></output>
