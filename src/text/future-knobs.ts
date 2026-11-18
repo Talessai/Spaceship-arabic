@@ -1,6 +1,7 @@
 import type { Point } from "../point.ts"
 import type { Lead } from "./attention.ts"
 import { strengthLevelOf, optionIndexAt, valueOf, type Control, type Dimension, type DimensionSource } from "./dimension.ts"
+import { onDoublePress } from "./double-press.ts"
 import { makeDraggable } from "./drag.ts"
 import { axisFor, visibleViewport } from "./fan-axis.ts"
 import { GRADUATIONS, hudNodesOf, NUMBERED_EVERY, RULER_STEPS, STRENGTH_RANGE_PX, SWING_RADIANS, type ReadoutPart } from "./future-hud.ts"
@@ -30,7 +31,6 @@ const DRAG_SPEED_FULL = 1.2
 /** At most this many graduation ticks per move, however far the knob jumps. */
 const MAX_TICKS_PER_MOVE = 4
 /** Both presses of a double click on a knob fall within this long, as does the release that completes it. */
-const DOUBLE_CLICK_MS = 500
 
 type FutureKnobsOptions = {
   template: HTMLTemplateElement
@@ -203,7 +203,7 @@ export function createFutureKnobs({
       },
       onDrop: () => drop(knob),
     })
-    onDoubleClick(element, () => remove(knob))
+    onDoublePress(element, () => remove(knob))
     element.addEventListener("pointerenter", () => ((knob.isHovered = true), layout()))
     element.addEventListener("pointerleave", () => ((knob.isHovered = false), layout()))
     updateAxis()
@@ -566,19 +566,6 @@ export function createFutureKnobs({
   function clampedSwingOf(knob: FutureKnob) {
     return positionOf(knob) * 2 * SWING_RADIANS - SWING_RADIANS
   }
-}
-
-/**
- * Calls `onDouble` on a double click whose two presses both landed on `element`. A knob spawned by double clicking the main knob and holding
- * captures that pointer, so the gesture's own double click is delivered to it on release; that one must not delete it.
- */
-function onDoubleClick(element: HTMLElement, onDouble: () => void) {
-  let presses: number[] = []
-  element.addEventListener("pointerdown", ({ timeStamp }) => (presses = [...presses.slice(-1), timeStamp]))
-  element.addEventListener("dblclick", ({ timeStamp }) => {
-    const [first, second] = presses
-    if (presses.length === 2 && second - first <= DOUBLE_CLICK_MS && timeStamp - second <= DOUBLE_CLICK_MS) onDouble()
-  })
 }
 
 function isSteering(knob: FutureKnob) {
