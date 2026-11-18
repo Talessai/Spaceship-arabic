@@ -4,6 +4,7 @@ import "@fontsource/ibm-plex-sans-arabic/600.css"
 import { $ } from "../dom.ts"
 import { KEY_STORAGE } from "../llm/claude.ts"
 import { controlsOf } from "./controls.ts"
+import { storedDraft, storedReferenceNumber, storedToolText, storeDraft, storeTopic } from "./draft-store.ts"
 import { liveWriter } from "./live-writer.ts"
 import { createIndex } from "./retrieval.ts"
 import { simulatedWriter } from "./simulated-writer.ts"
@@ -11,12 +12,9 @@ import { removeStoredSource, storedSources, storeSource } from "./source-store.t
 import { MAX_SOURCES, MIN_SOURCES, sourceOf, type Passage, type Source } from "./sources.ts"
 import { checked, type CheckedClaim, type Gap } from "./writer.ts"
 
-const DRAFT_STORAGE = "research-draft"
 const PASSAGES_PER_REQUEST = 10
 /** With an empty instruction, the end of the draft is what the passages are searched by. */
 const QUERY_TAIL_CHARS = 400
-
-type Reference = { source: string; page: number; quote: string }
 
 const isLive = new URLSearchParams(location.search).get("live") === "true"
 const writer = isLive ? liveWriter : simulatedWriter
@@ -36,7 +34,6 @@ const pinnedList = $<HTMLUListElement>("#pinned")
 
 let sources: Source[] = []
 let index = createIndex([])
-let references: Reference[] = []
 let offered: CheckedClaim[] = []
 let pinned: Passage[] = []
 let controller: AbortController | undefined
@@ -91,9 +88,16 @@ accept.addEventListener("click", acceptChecked)
 $("#download").addEventListener("click", downloadDraft)
 $("#clear").addEventListener("click", () => {
   draft.value = ""
-  references = []
-  saveDraft()
+  storeDraft({ text: "", references: [] })
   showReferences()
+})
+$("#take-tool-text").addEventListener("click", () => {
+  draft.value = [draft.value.trimEnd(), storedToolText()].filter(Boolean).join("\n\n")
+  saveDraft()
+})
+$("#open-tool").addEventListener("click", () => {
+  storeTopic($<HTMLInputElement>("[name=instruction]").value.trim())
+  location.assign("../?research=true")
 })
 
 function addSource(title: string, markdown: string) {
@@ -157,7 +161,10 @@ async function write(instruction: string) {
   stop.disabled = false
   status.value = `يكتب من ${passages.length} مقاطع…`
   try {
-    for await (const result of writer({ draft: draft.value, instruction, passages, pinned: pinned.length, controls: controlsOf(controls) }, signal)) {
+    for await (const result of writer(
+      { draft: draft.value, instruction, passages, pinned: pinned.length, leads: [], controls: controlsOf(controls) },
+      signal,
+    )) {
       if (result.kind === "gap") showGap(result)
       else showClaim(checked(result, passages))
     }
@@ -216,7 +223,7 @@ function showGap({ missing, searchTerms }: Gap) {
 function acceptChecked() {
   const accepted = [...claimList.querySelectorAll<HTMLInputElement>("input:checked")].map(({ value }) => offered[Number(value)])
   const sentences = accepted.map(
-    (claim) => `${claim.sentence} [${referenceNumberOf({ source: claim.cited!.source, page: claim.cited!.page, quote: claim.quote })}]`,
+    (claim) => `${claim.sentence} [${storedReferenceNumber({ source: claim.cited!.source, page: claim.cited!.page, quote: claim.quote })}]`,
   )
   draft.value = [draft.value.trimEnd(), sentences.join(" ")].filter(Boolean).join(draft.value.endsWith("\n") ? "\n" : " ")
   for (const checkbox of claimList.querySelectorAll<HTMLInputElement>("input:checked")) checkbox.closest("li")!.remove()
@@ -225,16 +232,9 @@ function acceptChecked() {
   showReferences()
 }
 
-function referenceNumberOf(reference: Reference) {
-  const existing = references.findIndex(({ source, page, quote }) => source === reference.source && page === reference.page && quote === reference.quote)
-  if (existing !== -1) return existing + 1
-  references.push(reference)
-  return references.length
-}
-
 function showReferences() {
   referenceList.replaceChildren(
-    ...references.map(({ source, page, quote }, i) => {
+    ...storedDraft().references.map(({ source, page, quote }, i) => {
       const item = cloneOf("#reference-item")
       item.querySelector("span")!.textContent = `[${i + 1}] ${source}، ص ${page}`
       item.querySelector("blockquote")!.textContent = quote
@@ -244,7 +244,9 @@ function showReferences() {
 }
 
 function downloadDraft() {
-  const list = references.map(({ source, page, quote }, i) => `[${i + 1}] ${source}، ص ${page}: «${quote}»`).join("\n\n")
+  const list = storedDraft()
+    .references.map(({ source, page, quote }, i) => `[${i + 1}] ${source}، ص ${page}: «${quote}»`)
+    .join("\n\n")
   const link = Object.assign(document.createElement("a"), {
     href: URL.createObjectURL(new Blob([`${draft.value}\n\n## المراجع\n\n${list}\n`], { type: "text/markdown" })),
     download: "draft.md",
@@ -254,13 +256,11 @@ function downloadDraft() {
 }
 
 function saveDraft() {
-  localStorage.setItem(DRAFT_STORAGE, JSON.stringify({ text: draft.value, references }))
+  storeDraft({ ...storedDraft(), text: draft.value })
 }
 
 function restoreDraft() {
-  const saved = JSON.parse(localStorage.getItem(DRAFT_STORAGE) ?? "null") as { text: string; references: Reference[] } | null
-  draft.value = saved?.text ?? ""
-  references = saved?.references ?? []
+  draft.value = storedDraft().text
   showReferences()
 }
 

@@ -535,6 +535,26 @@
         }
       }
       /* Polybar-style modules in one centered row: model, text, steering, sound; a hairline between every field. */
+      /* What research mode has to say beside the text: sources ran out, what is missing, or why nothing was written. */
+      #notice {
+        position: fixed;
+        inset: auto 0 var(--tray-height);
+        padding: var(--gap) calc(1.5 * var(--gap));
+        border-top: var(--hair) dashed var(--hot);
+        background: var(--bg);
+        color: var(--ink-2);
+        font-size: var(--hud-size);
+        line-height: var(--hud-line);
+        unicode-bidi: plaintext;
+
+        &:empty {
+          display: none;
+        }
+      }
+      #research-link {
+        margin-inline-start: var(--gap);
+        color: inherit;
+      }
       #tray {
         position: fixed;
         inset: auto 0 0;
@@ -916,7 +936,9 @@
       <output id="status" aria-live="off"></output>
       <button id="sound-toggle" type="button" aria-pressed="true" aria-label="الصوت">♪<b>يعمل</b></button>
       <a id="extra-link" href="extra/style-1.html">إضافات</a>
+      <a id="research-link" href="research/">بحث</a>
     </footer>
+    <output id="notice" dir="rtl" aria-live="polite"></output>
     <dialog id="live-keys" dir="rtl" aria-labelledby="live-keys-title" aria-describedby="live-keys-note" closedby="closerequest">
       <form method="dialog" autocomplete="off">
         <h2 id="live-keys-title">إقلاع</h2>

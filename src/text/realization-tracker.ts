@@ -27,7 +27,7 @@ export function createRealizationTracker(source: RealizationSource, onScore: () 
   /** Requests at most once per `REQUEST_DELAY_MS`, for the latest text, so streaming and dragging still get scored as they go. */
   function score(trackings: Tracking[], story: StoryLayout) {
     latest = { trackings, story }
-    timer ??= setTimeout(() => {
+    timer ??= window.setTimeout(() => {
       timer = undefined
       latest?.trackings.forEach((tracking) => request(tracking, latest!.story))
     }, REQUEST_DELAY_MS)

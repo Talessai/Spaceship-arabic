@@ -210,7 +210,7 @@ export function createFutureKnobs({
     drag(knob, point)
     element.setPointerCapture(pointerId)
     sounds.spawn(point.x)
-    knob.sound.loadingTimer = setTimeout(() => (knob.sound.loading = sounds.menuLoading(knob.point.x)), MENU_LOADING_GRACE_MS)
+    knob.sound.loadingTimer = window.setTimeout(() => (knob.sound.loading = sounds.menuLoading(knob.point.x)), MENU_LOADING_GRACE_MS)
     startBed(knob)
     receiveMenu(knob, menu)
   }

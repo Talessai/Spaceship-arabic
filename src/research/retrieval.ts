@@ -14,7 +14,13 @@ export function createIndex(passages: Passage[]) {
   const documentFrequency = new Map<string, number>()
   for (const terms of documents) for (const term of terms.keys()) documentFrequency.set(term, (documentFrequency.get(term) ?? 0) + 1)
 
-  return { search }
+  return { search, rarity }
+
+  /** How telling a search term is: higher the fewer passages hold it, and 0 when none does. */
+  function rarity(term: string) {
+    const matches = documentFrequency.get(term)
+    return matches ? Math.log(1 + (documents.length - matches + 0.5) / (matches + 0.5)) : 0
+  }
 
   function search(query: string, limit: number): Hit[] {
     const terms = [...new Set(searchTerms(query))]
@@ -28,9 +34,7 @@ export function createIndex(passages: Passage[]) {
   function termScore(term: string, document: Map<string, number>, length: number) {
     const frequency = document.get(term)
     if (!frequency) return 0
-    const matches = documentFrequency.get(term)!
-    const rarity = Math.log(1 + (documents.length - matches + 0.5) / (matches + 0.5))
-    return (rarity * frequency * (K1 + 1)) / (frequency + K1 * (1 - B + (B * length) / averageLength))
+    return (rarity(term) * frequency * (K1 + 1)) / (frequency + K1 * (1 - B + (B * length) / averageLength))
   }
 }
 

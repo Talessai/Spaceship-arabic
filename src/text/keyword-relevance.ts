@@ -41,7 +41,7 @@ export function createKeywordRelevance(source: RelevanceSource, onChange: () => 
     story = index === -1 ? "" : layout.combined.slice(0, layout.sentences[index].start).trim()
     leads = next
     clearTimeout(timer)
-    if (tip && leads.some((lead) => !scores.has(keyOf(tip, lead)))) timer = setTimeout(request, REQUEST_DELAY_MS)
+    if (tip && leads.some((lead) => !scores.has(keyOf(tip, lead)))) timer = window.setTimeout(request, REQUEST_DELAY_MS)
     onChange()
   }
 
