@@ -4,7 +4,7 @@ import "@fontsource/ibm-plex-sans-arabic/400.css"
 import "@fontsource/ibm-plex-sans-arabic/600.css"
 import { $ } from "../dom.ts"
 import { centeredAt, type Point } from "../point.ts"
-import { storeToolText } from "../research/draft-store.ts"
+import { citedText, storeToolText } from "../research/draft-store.ts"
 import { createResearchSources } from "../research/tool-source.ts"
 import { createAttentionKnobs } from "./attention-knobs.ts"
 import { caretAt, isAhead, pointAt, type Caret, type TextMetrics } from "./caret.ts"
@@ -12,6 +12,7 @@ import { simulatedSource } from "./completion.ts"
 import { createConnections } from "./connections.ts"
 import { onDoublePress } from "./double-press.ts"
 import { makeDraggable } from "./drag.ts"
+import { createEdgeScroll } from "./edge-scroll.ts"
 import { createFutureKnobs } from "./future-knobs.ts"
 import { onPressAndHold } from "./hold.ts"
 import { createKeywordRelevance } from "./keyword-relevance.ts"
@@ -66,6 +67,8 @@ const modeToggle = $<HTMLButtonElement>("#mode-toggle")
 const extraLink = $<HTMLAnchorElement>("#extra-link")
 const railElement = $("#rail")
 const noticeElement = $<HTMLOutputElement>("#notice")
+const trayElement = $("#tray")
+const copyButton = $<HTMLButtonElement>("#copy-text")
 const style = getComputedStyle(element)
 /** Fonts load per script, so the Arabic face is asked for by sample text before pretext measures with it. */
 await Promise.all([document.fonts.load(style.font), document.fonts.load(style.font, "أبجد")])
@@ -162,15 +165,14 @@ onPressAndHold(
   },
 )
 // Dragging scrubs at once, forward or back.
+const edgeScroll = createEdgeScroll(dragTo, () => innerHeight - (noticeElement.offsetHeight ? noticeElement : trayElement).getBoundingClientRect().top)
 makeDraggable(handle, {
   onDrag: (point) => {
-    handle.toggleAttribute("data-dragging", true)
-    const before = shownCount
-    moveTo(point)
-    discardIfBehindRest()
-    soundWordsCrossed(before, point)
+    dragTo(point)
+    edgeScroll.follow(point)
   },
   onDrop: () => {
+    edgeScroll.stop()
     if (handle.hasAttribute("data-dragging")) sounds.knobRelease(circleOf(handle).center.x)
     handle.removeAttribute("data-dragging")
     lastDrag = undefined
@@ -187,6 +189,14 @@ createPointer({
   aim: aimAt,
   pull: pullToward,
 })
+
+function dragTo(point: Point) {
+  handle.toggleAttribute("data-dragging", true)
+  const before = shownCount
+  moveTo(point)
+  discardIfBehindRest()
+  soundWordsCrossed(before, point)
+}
 
 addEventListener("resize", () => moveTo(pointAt(caret, metricsOf())))
 moveTo(pointAt(caret, metricsOf()))
@@ -348,6 +358,13 @@ function showResearchMode() {
   modeToggle.setAttribute("aria-pressed", "true")
   modeToggle.querySelector("b")!.textContent = "بحث"
   modeToggle.addEventListener("click", () => location.assign("research/"))
+  copyButton.hidden = false
+  copyButton.addEventListener("click", () =>
+    navigator.clipboard.writeText(citedText(shownText)).then(
+      () => (noticeElement.value = "نُسخ النص مع مراجعه. ألصقه حيث تكتب."),
+      () => (noticeElement.value = "تعذّر النسخ: المتصفح منع الوصول إلى الحافظة."),
+    ),
+  )
 }
 
 function prepareWords() {

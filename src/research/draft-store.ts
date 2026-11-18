@@ -24,10 +24,24 @@ export function storedReferenceNumber(reference: Reference) {
   return draft.references.length + 1
 }
 
+/** `text` followed by the references its bracketed numbers point to, each with its source, page and the quoted words. */
+export function citedText(text: string) {
+  const { references } = storedDraft()
+  const numbers = [...new Set([...text.matchAll(/\[(\d+)\]/g)].map(([, number]) => Number(number)))].filter((number) => references[number - 1])
+  const list = numbers
+    .sort((a, b) => a - b)
+    .map((number) => {
+      const { source, page, quote } = references[number - 1]
+      return `[${number}] ${source}، ص ${page}: «${quote}»`
+    })
+  const prose = text.replace(/\s+/g, " ").trim()
+  return list.length ? `${prose}\n\nالمراجع\n${list.join("\n")}` : prose
+}
+
 /** What the tool is asked to write about, set on the research page. */
 export const storedTopic = () => localStorage.getItem(TOPIC_STORAGE) ?? ""
 export const storeTopic = (topic: string) => localStorage.setItem(TOPIC_STORAGE, topic)
 
 /** The text the tool last showed up to its knob, for the research page to take into the draft. */
 export const storedToolText = () => localStorage.getItem(TOOL_TEXT_STORAGE) ?? ""
-export const storeToolText = (text: string) => localStorage.setItem(TOOL_TEXT_STORAGE, text)
+export const storeToolText = (text: string) => localStorage.setItem(TOOL_TEXT_STORAGE, text.replace(/\s+/g, " ").trim())
