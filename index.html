@@ -535,6 +535,24 @@
         }
       }
       /* Polybar-style modules in one centered row: model, text, steering, sound; a hairline between every field. */
+      /* How to start, shown in research mode and on phones while no text is shown yet. */
+      #hint {
+        display: none;
+        position: fixed;
+        inset: 30% var(--padding) auto;
+        margin: 0;
+        color: var(--ink-3);
+        line-height: var(--line);
+        text-align: center;
+        pointer-events: none;
+
+        body[data-empty][data-research] & {
+          display: block;
+        }
+      }
+      body[data-research] #research-link {
+        display: none;
+      }
       /* What research mode has to say beside the text: sources ran out, what is missing, or why nothing was written. */
       #notice {
         position: fixed;
@@ -907,9 +925,21 @@
           -webkit-user-select: none;
           user-select: none;
         }
+        body[data-empty] #hint {
+          display: block;
+        }
+        /* The tray keeps what a thumb needs and fits the width: the way back, copy, and what the text holds. Speed readings, sound and extras are left to wider screens. */
         #tray {
-          justify-content: flex-start;
+          justify-content: space-between;
           overflow-x: auto;
+        }
+        #status .zone:first-child,
+        #sound-toggle,
+        #extra-link {
+          display: none;
+        }
+        #copy-text {
+          order: 1;
         }
       }
     </style>
@@ -942,6 +972,11 @@
       <button id="copy-text" type="button" hidden>نسخ</button>
       <a id="research-link" href="research/">بحث</a>
     </footer>
+    <p id="hint" dir="rtl">
+      اسحب الدائرة إلى اليسار ثم إلى الأسفل ليظهر النص.<br />
+      نقرتان عليها: العبارات المفتاحية.<br />
+      نقرتان مع إبقاء الإصبع: محاور الصياغة.
+    </p>
     <output id="notice" dir="rtl" aria-live="polite"></output>
     <dialog id="live-keys" dir="rtl" aria-labelledby="live-keys-title" aria-describedby="live-keys-note" closedby="closerequest">
       <form method="dialog" autocomplete="off">

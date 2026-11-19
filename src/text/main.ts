@@ -251,6 +251,7 @@ function render() {
   const text = lines.join(" ")
   const count = countWords(text)
 
+  document.body.toggleAttribute("data-empty", count === 0)
   if (count !== shownCount) restartDwell()
   shownCount = count
   scheduleTopUp()
@@ -355,8 +356,9 @@ function settleTopUp(wordsBefore: number) {
 
 /** In research mode the tray's mode button leads back to the research page, where sources, key and topic are set. */
 function showResearchMode() {
+  document.body.toggleAttribute("data-research", true)
   modeToggle.setAttribute("aria-pressed", "true")
-  modeToggle.querySelector("b")!.textContent = "بحث"
+  modeToggle.replaceChildren("↩ صفحة البحث")
   modeToggle.addEventListener("click", () => location.assign("research/"))
   copyButton.hidden = false
   copyButton.addEventListener("click", () =>
