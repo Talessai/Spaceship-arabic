@@ -9,9 +9,12 @@ import { createIndex } from "./retrieval.ts"
 import { storedSources } from "./source-store.ts"
 import { checked } from "./writer.ts"
 
-/** How many passages the outline is planned from, and how many of them one page may give. */
-const PLAN_PASSAGES = 40
-const PASSAGES_PER_PAGE = 2
+/**
+ * The outline is planned from every passage while the library is this small, since a search by the topic's words misses what the sources say in
+ * other words ("الأب" does not find "والده"). A larger library is cut to the passages nearest the topic, a few a page.
+ */
+const PLAN_PASSAGES = 300
+const PASSAGES_PER_PAGE = 3
 /** Ends a sentence that no passage backs, in place of reference numbers. */
 const UNSUPPORTED_MARK = "[؟]"
 /** As `sources.ts` labels a footnote's source. */
@@ -121,11 +124,12 @@ export function createResearchSources(onNotice: (notice: string) => void) {
     },
   }
 
-  /** Plans from the passages nearest the topic, spread over pages so no one page crowds the rest out, and notes the sources none of it rests on. */
+  /** Plans from the whole library when it is small, else from the passages nearest the topic, and notes the sources no point rests on. */
   async function planFor(topic: string, signal: AbortSignal) {
+    const all = (await sources).flatMap(({ passages }) => passages)
     const perPage = new Map<string, number>()
-    const passages = (await index)
-      .search(topic, PLAN_PASSAGES * PASSAGES_PER_PAGE)
+    const nearest = (await index)
+      .search(topic, all.length)
       .map(({ passage }) => passage)
       .filter(({ source, page }) => {
         const count = (perPage.get(`${source}\n${page}`) ?? 0) + 1
@@ -133,6 +137,7 @@ export function createResearchSources(onNotice: (notice: string) => void) {
         return count <= PASSAGES_PER_PAGE
       })
       .slice(0, PLAN_PASSAGES)
+    const passages = all.length <= PLAN_PASSAGES ? all : nearest
     const { points, missing } = passages.length ? await planOutline(topic, passages, signal) : { points: [], missing: "" }
     const used = new Set(points.flatMap(({ passages }) => passages.map(({ source }) => source.replace(FOOTNOTE_LABEL, ""))))
     const unused = (await sources).map(({ title }) => title).filter((title) => !used.has(title))
