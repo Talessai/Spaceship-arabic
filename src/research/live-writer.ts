@@ -7,6 +7,7 @@ import type { Citation, Claim, Gap, Writer, WriteRequest } from "./writer.ts"
 const MODEL = "claude-opus-5-5"
 /** The draft is sent whole up to this length, so the writer sees what is already said and does not say it again. */
 const DRAFT_CHARS = 12000
+const UNPLANNED_PASSAGES = 12
 
 const SYSTEM_PROMPT = `
 You help a researcher write from their own sources. The user message holds the sources as documents, then a REQUEST and the DRAFT so far.
@@ -86,12 +87,15 @@ export async function planOutline(topic: string, passages: Passage[], signal: Ab
   if (message.stop_reason === "refusal") throw new Error("رفض النموذج هذا الطلب.")
 
   const lines = message.content.flatMap((block) => (block.type === "text" ? block.text.split("\n") : []))
+  /** Read loosely: a model may number the lines, bold the label or bracket the passage numbers. */
   const points = lines.flatMap((line): Point[] => {
-    const [, claim, numbers] = line.match(/^\s*POINT:\s*(.+?)\s*\|\s*([\d\s,،]+)$/) ?? []
+    const [, claim, numbers] = line.match(/POINT[\s*_]*:[\s*_]*(.+?)\s*\|(.+)$/) ?? []
     const rests = (numbers?.match(/\d+/g) ?? []).map((number) => passages[Number(number) - 1]).filter(Boolean)
     return claim && rests.length ? [{ claim, passages: [...new Set(rests)] }] : []
   })
-  return { points, missing: lines.map((line) => line.match(/^\s*MISSING:\s*(.+)$/)?.[1]).find(Boolean) ?? "" }
+  const missing = lines.map((line) => line.match(/MISSING[\s*_]*:[\s*_]*(.+)$/)?.[1]).find(Boolean) ?? ""
+  /** A plan that cannot be read still leaves the passages: they are written as one point, so the reader gets text and not a dead end. */
+  return { points: points.length || missing ? points : [{ claim: topic, passages: passages.slice(0, UNPLANNED_PASSAGES) }], missing }
 }
 
 function clientOrThrow() {

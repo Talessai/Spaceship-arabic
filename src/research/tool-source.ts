@@ -59,6 +59,10 @@ export function createResearchSources(onNotice: (notice: string) => void) {
       const topic = storedTopic()
       const request = JSON.stringify([prefix, steering, topic])
       if (request === spent) return
+      if (!topic) {
+        spent = request
+        return onNotice("لا يوجد موضوع بعد. اضغط «صفحة البحث» في الأسفل، اكتب الموضوع، ثم اضغط «اكتب هذا الموضوع في الأداة».")
+      }
 
       try {
         if (plan?.topic !== topic) {
