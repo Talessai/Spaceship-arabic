@@ -4,6 +4,8 @@ import { defineConfig } from "vite"
 
 export default defineConfig({
   base: "./",
+  /** mupdf loads its WebAssembly from a URL beside its own module, which pre-bundling would break. */
+  optimizeDeps: { exclude: ["mupdf"] },
   build: {
     rollupOptions: {
       input: {

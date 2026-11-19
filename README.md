@@ -4,6 +4,8 @@
 [Spaceship IDE](https://github.com/chuanqisun/spaceship)
 للباحث Chuanqi Sun، برخصة MIT. تفاصيل التعديلات وحالتها في `CLAUDE.md`.
 
+صفحة البحث تقرأ ملفات PDF بمكتبة [mupdf](https://mupdf.com) المرخّصة برخصة AGPL-3.0.
+
 ```
 npm i
 npm run dev

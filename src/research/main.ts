@@ -7,6 +7,7 @@ import { controlsOf } from "./controls.ts"
 import { referenceMarks, storedDraft, storedToolText, storeDraft, storeTopic } from "./draft-store.ts"
 import { liveWriter } from "./live-writer.ts"
 import { createIndex } from "./retrieval.ts"
+import { markdownOf } from "./pdf-to-markdown.ts"
 import { simulatedWriter } from "./simulated-writer.ts"
 import { removeStoredSource, storedSources, storeSource } from "./source-store.ts"
 import { damageOf, MAX_SOURCES, MIN_SOURCES, sourceOf, type Passage, type Source } from "./sources.ts"
@@ -53,7 +54,11 @@ storedSources().then((stored) => {
 
 $<HTMLInputElement>("#source-files").addEventListener("change", async ({ currentTarget }) => {
   const input = currentTarget as HTMLInputElement
-  for (const file of [...(input.files ?? [])]) addSource(file.name.replace(/\.(md|txt)$/i, ""), await file.text())
+  for (const file of [...(input.files ?? [])]) {
+    const title = file.name.replace(/\.(md|txt|pdf)$/i, "")
+    if (!/\.pdf$/i.test(file.name)) addSource(title, await file.text())
+    else await addPdf(title, file)
+  }
   input.value = ""
 })
 
@@ -105,6 +110,22 @@ $("#open-tool").addEventListener("click", () => {
   storeTopic($<HTMLInputElement>("[name=instruction]").value.trim())
   location.assign("../?research=true")
 })
+
+/** Converts the PDF in this browser; nothing of it is uploaded. Says what could not be read, since a page left out is a gap the writer cannot see. */
+async function addPdf(title: string, file: File) {
+  sourceNote.value = `يحوّل «${title}»… قد يأخذ الملف الكبير نصف دقيقة.`
+  try {
+    const { markdown, pageCount, needsOcr, noText } = await markdownOf(new Uint8Array(await file.arrayBuffer()))
+    addSource(title, markdown)
+    const unread = needsOcr.length ? ` ${needsOcr.length} صفحة لم تُقرأ لأن حروفها بلا ترميز وتحتاج قراءة بصرية.` : ""
+    const readable = pageCount - needsOcr.length - noText.length
+    sourceNote.value = readable
+      ? `حُوّل «${title}»: ${readable} صفحة نصية من ${pageCount}.${unread}`
+      : `«${title}» لا نص فيه يمكن قراءته: هو ممسوح ضوئياً أو حروفه بلا ترميز. يحتاج قراءة بصرية، وهي غير متاحة بعد.`
+  } catch (error) {
+    sourceNote.value = `تعذّر تحويل «${title}»: ${error instanceof Error ? error.message : error}`
+  }
+}
 
 function addSource(title: string, markdown: string) {
   if (sources.length >= MAX_SOURCES) return void (sourceNote.value = `الحد الأقصى ${MAX_SOURCES} مصدراً. احذف مصدراً لتضيف غيره.`)
