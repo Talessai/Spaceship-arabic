@@ -4,7 +4,7 @@ import "@fontsource/ibm-plex-sans-arabic/600.css"
 import { $ } from "../dom.ts"
 import { KEY_STORAGE } from "../llm/claude.ts"
 import { controlsOf } from "./controls.ts"
-import { storedDraft, storedReferenceNumber, storedToolText, storeDraft, storeTopic } from "./draft-store.ts"
+import { referenceMarks, storedDraft, storedToolText, storeDraft, storeTopic } from "./draft-store.ts"
 import { liveWriter } from "./live-writer.ts"
 import { createIndex } from "./retrieval.ts"
 import { simulatedWriter } from "./simulated-writer.ts"
@@ -169,7 +169,7 @@ async function write(instruction: string) {
       if (result.kind === "gap") showGap(result)
       else showClaim(checked(result, passages))
     }
-    const unverified = offered.filter(({ cited }) => !cited).length
+    const unverified = offered.filter(({ support }) => !support.length).length
     status.value = offered.length ? `${offered.length} جملة، ${unverified} منها بلا سند.` : "لم تُكتب أي جملة."
   } catch (error) {
     status.value = signal.aborted ? "أُوقف." : `خطأ: ${error instanceof Error ? error.message : error}`
@@ -183,15 +183,18 @@ function showClaim(claim: CheckedClaim) {
   const item = cloneOf("#claim-item")
   const checkbox = item.querySelector("input")!
   checkbox.value = String(offered.length - 1)
-  checkbox.disabled = !claim.cited
+  const [first] = claim.support
+  checkbox.disabled = !first
   item.querySelector("span")!.textContent = claim.sentence
-  item.querySelector("blockquote")!.textContent = claim.quote
-  item.querySelector("cite")!.textContent = claim.cited ? `${claim.cited.source}، ص ${claim.cited.page}` : "هذا الاقتباس غير موجود حرفياً في المصادر."
-  item.toggleAttribute("data-unverified", !claim.cited)
+  item.querySelector("blockquote")!.textContent = claim.support.map(({ quote }) => quote).join("\n") || claim.citations[0]?.quote || ""
+  item.querySelector("cite")!.textContent = first
+    ? claim.support.map(({ passage }) => `${passage.source}، ص ${passage.page}`).join("؛ ")
+    : "لا يوجد لهذه الجملة اقتباس حرفي في المصادر."
+  item.toggleAttribute("data-unverified", !first)
   const pin = item.querySelector("button")!
-  pin.hidden = !claim.cited
+  pin.hidden = !first
   pin.addEventListener("click", () => {
-    if (!pinned.includes(claim.cited!)) pinned = [...pinned, claim.cited!]
+    if (!pinned.includes(first.passage)) pinned = [...pinned, first.passage]
     showPinned()
   })
   claimList.append(item)
@@ -223,9 +226,7 @@ function showGap({ missing, searchTerms }: Gap) {
 
 function acceptChecked() {
   const accepted = [...claimList.querySelectorAll<HTMLInputElement>("input:checked")].map(({ value }) => offered[Number(value)])
-  const sentences = accepted.map(
-    (claim) => `${claim.sentence} [${storedReferenceNumber({ source: claim.cited!.source, page: claim.cited!.page, quote: claim.quote })}]`,
-  )
+  const sentences = accepted.map((claim) => `${claim.sentence} ${referenceMarks(claim.support)}`)
   draft.value = [draft.value.trimEnd(), sentences.join(" ")].filter(Boolean).join(draft.value.endsWith("\n") ? "\n" : " ")
   for (const checkbox of claimList.querySelectorAll<HTMLInputElement>("input:checked")) checkbox.closest("li")!.remove()
   accept.disabled = true

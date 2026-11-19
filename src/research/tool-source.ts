@@ -3,14 +3,19 @@ import { strengthLevelOf, valueOf, type Dimension, type DimensionSource } from "
 import { wordSpans } from "../text/segments.ts"
 import type { TextSource } from "../text/text-stream.ts"
 import { searchTerms } from "./arabic.ts"
-import { storedReferenceNumber, storedTopic } from "./draft-store.ts"
-import { liveWriter } from "./live-writer.ts"
+import { referenceMarks, storedTopic } from "./draft-store.ts"
+import { liveWriter, planOutline, type Point } from "./live-writer.ts"
 import { createIndex } from "./retrieval.ts"
 import { storedSources } from "./source-store.ts"
 import { checked } from "./writer.ts"
 
-const PASSAGES_PER_REQUEST = 10
-const QUERY_TAIL_CHARS = 400
+/** How many passages the outline is planned from, and how many of them one page may give. */
+const PLAN_PASSAGES = 40
+const PASSAGES_PER_PAGE = 2
+/** Ends a sentence that no passage backs, in place of reference numbers. */
+const UNSUPPORTED_MARK = "[؟]"
+/** As `sources.ts` labels a footnote's source. */
+const FOOTNOTE_LABEL = " (حاشية)"
 const MAX_BOXES = 3
 const BOX_CONTEXT_WORDS = 2
 /** Boxes are picked among the latest words, which the next sentences follow from. */
@@ -25,61 +30,109 @@ const AXES: Dimension[] = [
   { name: "الصياغة", kind: "scale", low: "حرة", high: "قريبة من المصدر" },
 ]
 
+/** What the tool says once the plan is written out: what the sources did not cover, and which of them nothing was taken from. */
+function closingNoticeOf({ points, missing, unused }: { points: Point[]; missing: string; unused: string[] }) {
+  return [
+    `اكتمل المخطط: ${points.length} فقرات.`,
+    missing && `لم تغطِّ المصادر: ${missing}`,
+    unused.length && `لم يُؤخذ شيء من: ${unused.join("، ")} (لا يتصل بالموضوع).`,
+  ]
+    .filter(Boolean)
+    .join(" ")
+}
+
 /**
- * The tool's sources when it writes research: text continued from the researcher's stored sources alone, each sentence ending in its reference
- * number; boxes on the words the sources know best; and research axes for the fan. `onNotice` is told what the reader should know and the text
- * cannot say: that the sources ran out, what is missing, or why nothing was written.
+ * The tool's sources when it writes research: text written from the researcher's stored sources alone, one planned paragraph at a time, each
+ * sentence ending in its reference numbers; boxes on the words the sources know best; and research axes for the fan. `onNotice` is told what the
+ * reader should know and the text cannot say: which paragraph is being written, what is missing, or why nothing was written.
  */
 export function createResearchSources(onNotice: (notice: string) => void) {
-  const index = storedSources().then((sources) => createIndex(sources.flatMap(({ passages }) => passages)))
+  const sources = storedSources()
+  const index = sources.then((stored) => createIndex(stored.flatMap(({ passages }) => passages)))
   /** The request that last added nothing. Asking it again would cost a call and add nothing again, so it is not sent until something changes. */
   let spent = ""
+  /** The outline for the topic, and the paragraph written for each of its points so far, in order. */
+  let plan: { topic: string; points: Point[]; missing: string; unused: string[]; written: string[] } | undefined
 
   const text: TextSource = {
     async *complete(prefix, steering, signal) {
       const topic = storedTopic()
-      const leads = steering.leads.map(({ before, keyword, after }) => `${before}${keyword}${after}`.trim())
       const request = JSON.stringify([prefix, steering, topic])
       if (request === spent) return
 
-      const passages = (await index).search([topic, ...leads, prefix.slice(-QUERY_TAIL_CHARS)].join(" "), PASSAGES_PER_REQUEST).map(({ passage }) => passage)
-      if (!passages.length) {
-        spent = request
-        return onNotice("لا توجد بيانات كافية: لا يوجد في مصادرك مقطع يتصل بهذا الموضوع. أضف مصادر من صفحة البحث.")
-      }
-
-      const controls = steering.controls.map((control) => ({
-        name: control.dimension.name,
-        toward: valueOf(control),
-        strength: strengthLevelOf(control.strength),
-      }))
-      let written = 0
-      let unsupported = 0
-      let gap = ""
-      onNotice("")
       try {
-        for await (const result of liveWriter({ draft: prefix, instruction: topic, passages, pinned: 0, leads, controls }, signal)) {
-          if (result.kind === "gap") {
-            gap = `ينقص المصادر: ${result.missing}${result.searchTerms && ` كلمات للبحث: ${result.searchTerms}`}`
-            continue
-          }
-          const { cited, sentence, quote } = checked(result, passages)
-          if (!cited) {
-            unsupported++
-            continue
-          }
-          const number = storedReferenceNumber({ source: cited.source, page: cited.page, quote })
-          yield `${prefix || written ? " " : ""}${sentence} [${number}]`
-          written++
+        if (plan?.topic !== topic) {
+          onNotice("يُحضَّر مخطط البحث من مصادرك…")
+          plan = await planFor(topic, signal)
         }
+        if (!plan.points.length) {
+          spent = request
+          return onNotice(`لا توجد بيانات كافية: لا يوجد في مصادرك ما يُبنى عليه هذا الموضوع. ${plan.missing}`.trim())
+        }
+
+        /** A drag back cut the text, so the first paragraph no longer whole in it is the one to write. */
+        const cut = plan.written.findIndex((paragraph) => !prefix.includes(paragraph))
+        if (cut !== -1) plan.written.length = cut
+        const position = plan.written.length
+        const point = plan.points[position]
+        if (!point) {
+          spent = request
+          return onNotice(closingNoticeOf(plan))
+        }
+
+        const progress = `الفقرة ${position + 1} من ${plan.points.length}: ${point.claim}`
+        onNotice(progress)
+        const leads = steering.leads.map(({ before, keyword, after }) => `${before}${keyword}${after}`.trim())
+        const controls = steering.controls.map((control) => ({
+          name: control.dimension.name,
+          toward: valueOf(control),
+          strength: strengthLevelOf(control.strength),
+        }))
+        const outline = plan.points.map(({ claim }) => claim)
+        let paragraph = ""
+        let unsupported = 0
+        let gap = ""
+        for await (const result of liveWriter(
+          { draft: prefix, instruction: topic, passages: point.passages, pinned: 0, leads, controls, point: point.claim, outline },
+          signal,
+        )) {
+          if (result.kind === "gap") {
+            gap = ` ينقص المصادر: ${result.missing}${result.searchTerms && ` كلمات للبحث: ${result.searchTerms}`}`
+            continue
+          }
+          const { sentence, support } = checked(result, point.passages)
+          if (!support.length) unsupported++
+          const chunk = `${prefix || paragraph ? " " : ""}${sentence} ${support.length ? referenceMarks(support) : UNSUPPORTED_MARK}`
+          paragraph += chunk
+          yield chunk
+        }
+        if (!paragraph) spent = request
+        plan.written[position] = paragraph.trim()
+        onNotice(`${progress}${unsupported ? ` · ${unsupported} جملة بلا سند، موسومة ${UNSUPPORTED_MARK}` : ""}${gap}`)
       } catch (error) {
         if (signal.aborted) throw error
         spent = request
-        return onNotice(`تعذّرت الكتابة: ${error instanceof Error ? error.message : error}`)
+        onNotice(`تعذّرت الكتابة: ${error instanceof Error ? error.message : error}`)
       }
-      if (!written) spent = request
-      onNotice([gap, unsupported ? `حُذفت ${unsupported} جملة بلا سند.` : ""].filter(Boolean).join(" "))
     },
+  }
+
+  /** Plans from the passages nearest the topic, spread over pages so no one page crowds the rest out, and notes the sources none of it rests on. */
+  async function planFor(topic: string, signal: AbortSignal) {
+    const perPage = new Map<string, number>()
+    const passages = (await index)
+      .search(topic, PLAN_PASSAGES * PASSAGES_PER_PAGE)
+      .map(({ passage }) => passage)
+      .filter(({ source, page }) => {
+        const count = (perPage.get(`${source}\n${page}`) ?? 0) + 1
+        perPage.set(`${source}\n${page}`, count)
+        return count <= PASSAGES_PER_PAGE
+      })
+      .slice(0, PLAN_PASSAGES)
+    const { points, missing } = passages.length ? await planOutline(topic, passages, signal) : { points: [], missing: "" }
+    const used = new Set(points.flatMap(({ passages }) => passages.map(({ source }) => source.replace(FOOTNOTE_LABEL, ""))))
+    const unused = (await sources).map(({ title }) => title).filter((title) => !used.has(title))
+    return { topic, points, missing, unused, written: [] as string[] }
   }
 
   /** Marks the recent words the sources mention least often: the specific terms of the passage, which the next sentences can be led by. */

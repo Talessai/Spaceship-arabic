@@ -24,6 +24,12 @@ export function storedReferenceNumber(reference: Reference) {
   return draft.references.length + 1
 }
 
+/** The bracketed reference numbers for what backs a sentence, each stored once, as in "[2][5]". */
+export function referenceMarks(support: { passage: { source: string; page: number }; quote: string }[]) {
+  const numbers = support.map(({ passage, quote }) => storedReferenceNumber({ source: passage.source, page: passage.page, quote }))
+  return [...new Set(numbers)].map((number) => `[${number}]`).join("")
+}
+
 /** `text` followed by the references its bracketed numbers point to, each with its source, page and the quoted words. */
 export function citedText(text: string) {
   const { references } = storedDraft()

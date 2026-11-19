@@ -23,6 +23,6 @@ export const simulatedWriter: Writer = async function* ({ draft, instruction, pa
   for (const { sentence, index } of sentences) {
     await new Promise((resolve) => setTimeout(resolve, STEP_MS))
     signal.throwIfAborted()
-    yield { kind: "claim", sentence, passage: index, quote: sentence }
+    yield { kind: "claim", sentence, citations: [{ passage: index, quote: sentence }] }
   }
 }
