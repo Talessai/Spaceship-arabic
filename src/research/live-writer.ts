@@ -47,6 +47,29 @@ Then, if the topic has a side the passages do not cover, end with:
 MISSING: what is not covered, described as the kind of source that would hold it, in the topic's language. Do not name a specific title or author.
 `.trim()
 
+const CHECK_PROMPT = `
+You check a research draft against the sources it cites, for a researcher who must not put an unsupported sentence in a thesis. The user message holds the draft, whose sentences end in bracketed reference numbers, or in [؟] where a sentence cites nothing, followed by the list of references: each number with its source, page and the quoted words.
+
+For every sentence, decide whether the quoted words of the references it cites state what the sentence says. Judge against the quoted words alone, not against what you know or what the source probably says elsewhere. Rewording is fine; a claim, name, number or date that the quoted words do not carry is not.
+
+Output one line per sentence, in order, and nothing else:
+
+number of the sentence | verdict | note
+
+The verdict is one of:
+SUPPORTED: the cited words state everything the sentence says. Leave the note empty.
+PARTIAL: they state part of it. The note says what they do not state.
+UNSUPPORTED: they do not state it, or the sentence cites nothing and no reference states it. The note says what is missing.
+MISPLACED: its own references do not state it, but another reference in the list does. The note names that reference by its source and page.
+
+Write notes in the draft's language, in under 20 words. A sentence that reports the source's own doubt or inconsistency is judged like any other: is that doubt or inconsistency visible in the cited words?
+`.trim()
+
+export type Verdict = "SUPPORTED" | "PARTIAL" | "UNSUPPORTED" | "MISPLACED"
+
+/** What the check found for one sentence of the draft, by its position. */
+export type Finding = { sentence: string; verdict: Verdict; note: string }
+
 /** One planned paragraph: what it establishes and the passages it rests on. */
 export type Point = { claim: string; passages: Passage[] }
 
@@ -101,6 +124,39 @@ export async function planOutline(topic: string, passages: Passage[], signal: Ab
   const missing = lines.map((line) => line.match(/MISSING[\s*_]*:[\s*_]*(.+)$/)?.[1]).find(Boolean) ?? ""
   /** A plan that cannot be read still leaves the passages: they are written as one point, so the reader gets text and not a dead end. */
   return { points: points.length || missing ? points : [{ claim: topic, passages: passages.slice(0, UNPLANNED_PASSAGES) }], missing }
+}
+
+/**
+ * Asks whether each sentence of `citedDraft` follows from the quoted words of the references it cites. This is the check the code cannot make:
+ * `checked` only finds a quote in a passage, so a reference attached to the wrong sentence passes it.
+ */
+export async function checkSupport(citedDraft: string, signal: AbortSignal): Promise<Finding[]> {
+  const [body] = citedDraft.split(/\n\s*المراجع\s*\n/)
+  const sentences = [...body.matchAll(/\s*(.+?(?:\s*\[(?:\d+|؟)\])+)/gs)].map(([, sentence]) => sentence.trim())
+  if (!sentences.length) return []
+  const numbered = sentences.map((sentence, i) => `${i + 1}. ${sentence}`).join("\n")
+  const message = await clientOrThrow()
+    .beta.messages.stream(
+      {
+        model: MODEL,
+        max_tokens: 16000,
+        output_config: { effort: "medium" },
+        betas: ["server-side-fallback-2026-07-01"],
+        fallbacks: "default",
+        system: CHECK_PROMPT,
+        messages: [{ role: "user", content: `DRAFT\n${numbered}\n\n${citedDraft.slice(body.length).trim()}` }],
+      },
+      { signal },
+    )
+    .finalMessage()
+  if (message.stop_reason === "refusal") throw new Error("رفض النموذج هذا الطلب.")
+
+  const lines = message.content.flatMap((block) => (block.type === "text" ? block.text.split("\n") : []))
+  return lines.flatMap((line): Finding[] => {
+    const [, number, verdict, note] = line.match(/^\W*(\d+)[\s.*_]*\|[\s*_]*(SUPPORTED|PARTIAL|UNSUPPORTED|MISPLACED)[\s*_]*(?:\|\s*(.*))?$/) ?? []
+    const sentence = sentences[Number(number) - 1]
+    return sentence ? [{ sentence, verdict: verdict as Verdict, note: note?.trim() ?? "" }] : []
+  })
 }
 
 function clientOrThrow() {
