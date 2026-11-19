@@ -19,7 +19,7 @@ The researcher keeps only what the documents back, because an unsupported senten
 
 Write the next paragraph of the draft, 3 to 6 sentences of plain prose without headings, lists or markdown, in the language of the draft, or of the request when the draft is empty. A document may be in another language.
 
-This is new writing, not a collage. Say things in your own words and connect them: what led to what, what agrees, what differs. Do not copy a document's sentences. A direct quotation is rare, short, exact, and inside quotation marks. Every sentence cites the document or documents behind it, and where several documents say the same thing, say it once and cite them all. Where two documents disagree, give both accounts, each with its citation, and do not choose between them. Keep what a document reports as fact apart from what its author judges or praises: attribute the judgement to the author. A document titled as a footnote (حاشية) is the source's own note, often naming an older work: cite it as a note, and name the older work when you rely on it.
+This is new writing, not a collage. Say things in your own words and connect them: what led to what, what agrees, what differs. Do not copy a document's sentences, and do not splice a run of a document's words into your sentence: each sentence is grammatical in your own wording. A direct quotation is rare, short, exact, and inside quotation marks. Every sentence cites the document or documents behind it, and where several documents say the same thing, say it once and cite them all. Where two documents disagree, give both accounts, each with its citation, and do not choose between them. Keep what a document reports as fact apart from what its author judges or praises: attribute a judgement to its author where it first appears in the paragraph. The reference number already says where a statement comes from, so do not close sentence after sentence with "as the book reports" or the like, and do not comment on your own reading or method. A document titled as a footnote (حاشية) is the source's own note, often naming an older work: cite it as a note, and name the older work when you rely on it.
 
 Each sentence must stand complete: it names its subject, and it does not open with a pronoun or relative word whose referent is in a sentence you did not write. The paragraph adds to the draft: do not restate what the draft already says. The draft may stop in the middle of a sentence, because the researcher cut it there: then your first words finish that sentence, picking up exactly where it stops without repeating any of it, and the paragraph goes on from there.
 
@@ -34,7 +34,7 @@ SEARCH: 3 to 6 keywords for finding such a source
 `.trim()
 
 const PLAN_PROMPT = `
-You plan a piece of research writing for a researcher who writes only from their own sources. The user message holds numbered PASSAGES from those sources and the TOPIC.
+You plan a piece of research writing for a researcher who writes only from their own sources. The user message holds numbered PASSAGES from those sources, in reading order, and the TOPIC. The sources may say what the topic names in other words, and a whole source may have nothing to do with the topic: such a source gives no paragraph.
 
 Lay out the paragraphs that the passages can support on this topic, 3 to 8 of them. Order them the way the material calls for: by time for a life or a history, by theme for an analysis. Each paragraph establishes one distinct thing; do not plan two paragraphs that would say the same. Build on passages that carry evidence, such as dates, numbers, documents, named witnesses and quoted originals, before passages that only praise or sum up. Leave out passages that are not about the topic, even if they share its words.
 
@@ -201,9 +201,10 @@ async function* resultsOf(blocks: AsyncIterable<Block>): AsyncGenerator<Claim | 
 
   /** Passes on the sentence held before `claim`, then `claim` itself unless it has no citation yet and must wait for the next block. */
   function* settled(claim: Claim): Generator<Claim> {
+    const tidy = { ...claim, sentence: claim.sentence.replace(/\s+([.،؛:!؟])/g, "$1") }
     if (held) yield held
-    held = claim.citations.length ? undefined : claim
-    if (claim.citations.length) yield claim
+    held = tidy.citations.length ? undefined : tidy
+    if (tidy.citations.length) yield tidy
   }
 }
 
