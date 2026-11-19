@@ -37,6 +37,14 @@ export function sourceOf(title: string, markdown: string): Source {
   }
 }
 
+/**
+ * How many leftovers of a damaged or outdated conversion the source's text holds: footnote marks that came out as brackets, and ligatures that
+ * came out as a doubled letter. More than a few means the file should be converted again before it is quoted from.
+ */
+export function damageOf({ passages }: Source) {
+  return passages.reduce((count, { text }) => count + (text.match(/\(\s*[\d٠-٩]*\s*\(+| (?:نن|اا)(?=\S)/g)?.length ?? 0), 0)
+}
+
 function paragraphsOf(pageText: string) {
   return pageText
     .split(/\n\s*\n/)

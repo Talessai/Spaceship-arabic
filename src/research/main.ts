@@ -9,10 +9,12 @@ import { liveWriter } from "./live-writer.ts"
 import { createIndex } from "./retrieval.ts"
 import { simulatedWriter } from "./simulated-writer.ts"
 import { removeStoredSource, storedSources, storeSource } from "./source-store.ts"
-import { MAX_SOURCES, MIN_SOURCES, sourceOf, type Passage, type Source } from "./sources.ts"
+import { damageOf, MAX_SOURCES, MIN_SOURCES, sourceOf, type Passage, type Source } from "./sources.ts"
 import { checked, type CheckedClaim, type Gap } from "./writer.ts"
 
 const PASSAGES_PER_REQUEST = 10
+/** A sound conversion still leaves a stray mark or two. */
+const MAX_DAMAGE = 5
 /** With an empty instruction, the end of the draft is what the passages are searched by. */
 const QUERY_TAIL_CHARS = 400
 
@@ -133,7 +135,9 @@ function showSources() {
       const pages = new Set(source.passages.map(({ page }) => page)).size
       const unreadable = source.unreadablePages.length ? `، ${source.unreadablePages.length} صفحة غير مقروءة تحتاج قراءة بصرية` : ""
       item.querySelector("b")!.textContent = source.title
-      item.querySelector("small")!.textContent = `${pages} صفحة، ${source.passages.length} مقطعاً${unreadable}`
+      const damaged = damageOf(source) > MAX_DAMAGE ? "، استخراج قديم أو تالف: احذفه وأضف الملف المصحَّح" : ""
+      item.querySelector("small")!.textContent = `${pages} صفحة، ${source.passages.length} مقطعاً${unreadable}${damaged}`
+      item.toggleAttribute("data-damaged", Boolean(damaged))
       item.querySelector("button")!.addEventListener("click", () => {
         sources = sources.filter((existing) => existing !== source)
         showSources()

@@ -30,17 +30,21 @@ export function referenceMarks(support: { passage: { source: string; page: numbe
   return [...new Set(numbers)].map((number) => `[${number}]`).join("")
 }
 
-/** `text` followed by the references its bracketed numbers point to, each with its source, page and the quoted words. */
+/**
+ * `text` followed by the references its bracketed numbers point to, each with its source, page and the quoted words. The stored numbers grow
+ * across sessions and rewrites, so the copy is renumbered from 1 in the order the text first cites them.
+ */
 export function citedText(text: string) {
   const { references } = storedDraft()
-  const numbers = [...new Set([...text.matchAll(/\[(\d+)\]/g)].map(([, number]) => Number(number)))].filter((number) => references[number - 1])
-  const list = numbers
-    .sort((a, b) => a - b)
-    .map((number) => {
-      const { source, page, quote } = references[number - 1]
-      return `[${number}] ${source}، ص ${page}: «${quote}»`
-    })
-  const prose = text.replace(/\s+/g, " ").trim()
+  const stored = [...new Set([...text.matchAll(/\[(\d+)\]/g)].map(([, number]) => Number(number)))].filter((number) => references[number - 1])
+  const prose = text
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\[(\d+)\]/g, (mark, number) => (stored.includes(Number(number)) ? `[${stored.indexOf(Number(number)) + 1}]` : mark))
+  const list = stored.map((number, i) => {
+    const { source, page, quote } = references[number - 1]
+    return `[${i + 1}] ${source}، ص ${page}: «${quote}»`
+  })
   return list.length ? `${prose}\n\nالمراجع\n${list.join("\n")}` : prose
 }
 

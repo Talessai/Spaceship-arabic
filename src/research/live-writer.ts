@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk"
 import { claudeClient, storedClaudeKey } from "../llm/claude.ts"
+import { normalized } from "./arabic.ts"
 import { controlLine } from "./controls.ts"
 import type { Passage } from "./sources.ts"
 import type { Citation, Claim, Gap, Writer, WriteRequest } from "./writer.ts"
@@ -8,6 +9,8 @@ const MODEL = "claude-opus-5-5"
 /** The draft is sent whole up to this length, so the writer sees what is already said and does not say it again. */
 const DRAFT_CHARS = 12000
 const UNPLANNED_PASSAGES = 12
+const LIFTED_RUN_WORDS = 4
+const LIFTED_SHARE = 0.7
 
 const SYSTEM_PROMPT = `
 You help a researcher write from their own sources. The user message holds the sources as documents, then a REQUEST and the DRAFT so far.
@@ -18,7 +21,9 @@ Write the next paragraph of the draft, 3 to 6 sentences of plain prose without h
 
 This is new writing, not a collage. Say things in your own words and connect them: what led to what, what agrees, what differs. Do not copy a document's sentences. A direct quotation is rare, short, exact, and inside quotation marks. Every sentence cites the document or documents behind it, and where several documents say the same thing, say it once and cite them all. Where two documents disagree, give both accounts, each with its citation, and do not choose between them. Keep what a document reports as fact apart from what its author judges or praises: attribute the judgement to the author. A document titled as a footnote (حاشية) is the source's own note, often naming an older work: cite it as a note, and name the older work when you rely on it.
 
-Each sentence must stand complete: it names its subject, and it does not open with a pronoun or relative word whose referent is in a sentence you did not write. The paragraph adds to the draft: do not restate what the draft already says.
+Each sentence must stand complete: it names its subject, and it does not open with a pronoun or relative word whose referent is in a sentence you did not write. The paragraph adds to the draft: do not restate what the draft already says. The draft may stop in the middle of a sentence, because the researcher cut it there: then your first words finish that sentence, picking up exactly where it stops without repeating any of it, and the paragraph goes on from there.
+
+Cite inside your own sentence: the citation belongs to the words of yours that state what the document says. Do not follow a sentence of yours with the document's sentence repeated as its proof.
 
 The user message may also hold optional sections. POINT is the one thing this paragraph establishes, taken from OUTLINE, which lists the whole plan so you know what the other paragraphs cover: write this point only. PINNED names the documents the researcher fixed in place: build on those first. KEY PHRASES are phrases of the draft the researcher marked: develop them. CONTROLS sets how the paragraph reads, one axis per line with the direction to move in and sometimes how far in parentheses. Controls change wording, order and emphasis only: a more assertive tone still states only what a document states.
 
@@ -149,20 +154,32 @@ async function* blocksOf(events: AsyncIterable<Anthropic.Beta.BetaRawMessageStre
 
 /**
  * Joins the blocks back into whole sentences. A response cites by block, and a sentence is often an uncited lead-in, a cited block and an uncited
- * close: the sentence keeps all of it and carries every citation that fell inside it. Only a sentence with no cited block is unsupported.
+ * close: the sentence keeps all of it and carries every citation that fell inside it.
+ *
+ * The model also backs a sentence of its own by repeating the passage's words after it, as a cited block. That block is evidence, not prose: its
+ * citation goes to the sentence before it and its text is left out, so the draft does not say everything twice. A sentence with neither a cited
+ * block inside it nor such evidence after it is unsupported.
  */
 async function* resultsOf(blocks: AsyncIterable<Block>): AsyncGenerator<Claim | Gap> {
   let pending = ""
   let citations: Citation[] = []
   let closing = ""
+  /** A finished sentence with no citation, waiting to see whether the next block is its evidence. */
+  let held: Claim | undefined
 
   for await (const { text, citation } of blocks) {
     /** A sentence that closed at the end of the last block is done before this block's citation can attach to it. */
     if (/[.!?؟]+["»”)]*\s*$/.test(pending)) {
-      yield { kind: "claim", sentence: pending.trim(), citations }
+      yield* settled({ kind: "claim", sentence: pending.trim(), citations })
       pending = ""
       citations = []
     }
+    if (held && !pending.trim() && citation && isLifted(text, citation.quote)) {
+      yield { ...held, citations: [citation] }
+      held = undefined
+      continue
+    }
+
     if (closing || /^\s*(MISSING|SEARCH):/m.test(text)) {
       const at = closing ? 0 : text.search(/^\s*(MISSING|SEARCH):/m)
       pending += text.slice(0, at)
@@ -171,15 +188,31 @@ async function* resultsOf(blocks: AsyncIterable<Block>): AsyncGenerator<Claim | 
     if (citation) citations.push(citation)
 
     for (let end = sentenceEnd(pending); end !== -1; end = sentenceEnd(pending)) {
-      yield { kind: "claim", sentence: pending.slice(0, end).trim(), citations }
+      yield* settled({ kind: "claim", sentence: pending.slice(0, end).trim(), citations })
       pending = pending.slice(end)
       citations = pending.trim() && citation ? [citation] : []
     }
   }
 
-  if (pending.trim()) yield { kind: "claim", sentence: pending.trim(), citations }
+  if (pending.trim()) yield* settled({ kind: "claim", sentence: pending.trim(), citations })
+  if (held) yield held
   const missing = closing.match(/^\s*MISSING:\s*(.+)$/m)?.[1]
   if (missing) yield { kind: "gap", missing: missing.trim(), searchTerms: closing.match(/^\s*SEARCH:\s*(.+)$/m)?.[1]?.trim() ?? "" }
+
+  /** Passes on the sentence held before `claim`, then `claim` itself unless it has no citation yet and must wait for the next block. */
+  function* settled(claim: Claim): Generator<Claim> {
+    if (held) yield held
+    held = claim.citations.length ? undefined : claim
+    if (claim.citations.length) yield claim
+  }
+}
+
+/** Whether `text` is the passage's own words: most of its runs of `LIFTED_RUN_WORDS` words appear in `quote`, spelling variants aside. */
+function isLifted(text: string, quote: string) {
+  const words = normalized(text).split(" ")
+  const source = ` ${normalized(quote)} `
+  const runs = words.slice(0, Math.max(0, words.length - LIFTED_RUN_WORDS + 1)).map((_, i) => words.slice(i, i + LIFTED_RUN_WORDS).join(" "))
+  return runs.length > 0 && runs.filter((run) => source.includes(` ${run} `)).length / runs.length >= LIFTED_SHARE
 }
 
 /** Where the first complete sentence of `text` ends: after its closing mark and any closing quote, once more text follows. -1 if none has ended. */
