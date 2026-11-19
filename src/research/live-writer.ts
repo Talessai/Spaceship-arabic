@@ -153,30 +153,31 @@ async function* blocksOf(events: AsyncIterable<Anthropic.Beta.BetaRawMessageStre
 }
 
 /**
- * Joins the blocks back into whole sentences. A response cites by block, and a sentence is often an uncited lead-in, a cited block and an uncited
- * close: the sentence keeps all of it and carries every citation that fell inside it.
+ * Joins the blocks back into whole sentences. A response cites by block, and the model places its citations three ways, all seen in real output:
  *
- * The model also backs a sentence of its own by repeating the passage's words after it, as a cited block. That block is evidence, not prose: its
- * citation goes to the sentence before it and its text is left out, so the draft does not say everything twice. A sentence with neither a cited
- * block inside it nor such evidence after it is unsupported.
+ * - inside the sentence, as a cited block between an uncited lead-in and close: the sentence keeps all of it and carries every such citation;
+ * - after the sentence, as a cited block with no words of its own, or only its closing mark: the citation belongs to the sentence just ended;
+ * - after the sentence, as a cited block that repeats the passage's words: that block is evidence, not prose, so its citation goes to the
+ *   sentence before it and its text is left out.
+ *
+ * So the latest finished sentence is held back until the next block shows whether a citation still belongs to it. A sentence that ends up with
+ * no citation is unsupported.
  */
 async function* resultsOf(blocks: AsyncIterable<Block>): AsyncGenerator<Claim | Gap> {
   let pending = ""
   let citations: Citation[] = []
   let closing = ""
-  /** A finished sentence with no citation, waiting to see whether the next block is its evidence. */
   let held: Claim | undefined
 
   for await (const { text, citation } of blocks) {
-    /** A sentence that closed at the end of the last block is done before this block's citation can attach to it. */
+    /** A sentence that closed at the end of the last block is done before this block's citation can attach to the next one. */
     if (/[.!?؟]+["»”)]*\s*$/.test(pending)) {
       yield* settled({ kind: "claim", sentence: pending.trim(), citations })
       pending = ""
       citations = []
     }
-    if (held && !pending.trim() && citation && isLifted(text, citation.quote)) {
-      yield { ...held, citations: [citation] }
-      held = undefined
+    if (held && !pending.trim() && citation && (!/[\p{L}\p{N}]/u.test(text) || (!held.citations.length && isLifted(text, citation.quote)))) {
+      held = { ...held, citations: [...held.citations, citation] }
       continue
     }
 
@@ -199,12 +200,10 @@ async function* resultsOf(blocks: AsyncIterable<Block>): AsyncGenerator<Claim | 
   const missing = closing.match(/^\s*MISSING:\s*(.+)$/m)?.[1]
   if (missing) yield { kind: "gap", missing: missing.trim(), searchTerms: closing.match(/^\s*SEARCH:\s*(.+)$/m)?.[1]?.trim() ?? "" }
 
-  /** Passes on the sentence held before `claim`, then `claim` itself unless it has no citation yet and must wait for the next block. */
+  /** Passes on the sentence held before `claim` and holds `claim` in its place. */
   function* settled(claim: Claim): Generator<Claim> {
-    const tidy = { ...claim, sentence: claim.sentence.replace(/\s+([.،؛:!؟])/g, "$1") }
     if (held) yield held
-    held = tidy.citations.length ? undefined : tidy
-    if (tidy.citations.length) yield tidy
+    held = { ...claim, sentence: claim.sentence.replace(/\s+([.،؛:!؟])/g, "$1") }
   }
 }
 
