@@ -5,6 +5,7 @@ import "@fontsource/ibm-plex-sans-arabic/600.css"
 import { $ } from "../dom.ts"
 import { centeredAt, type Point } from "../point.ts"
 import { citedText, storeToolText } from "../research/draft-store.ts"
+import { checkSupport, type Verdict } from "../research/live-writer.ts"
 import { createResearchSources } from "../research/tool-source.ts"
 import { createAttentionKnobs } from "./attention-knobs.ts"
 import { caretAt, isAhead, pointAt, type Caret, type TextMetrics } from "./caret.ts"
@@ -69,6 +70,7 @@ const railElement = $("#rail")
 const noticeElement = $<HTMLOutputElement>("#notice")
 const trayElement = $("#tray")
 const copyButton = $<HTMLButtonElement>("#copy-text")
+const checkButton = $<HTMLButtonElement>("#check-text")
 const style = getComputedStyle(element)
 /** Fonts load per script, so the Arabic face is asked for by sample text before pretext measures with it. */
 await Promise.all([document.fonts.load(style.font), document.fonts.load(style.font, "أبجد")])
@@ -361,12 +363,38 @@ function showResearchMode() {
   modeToggle.replaceChildren("↩ صفحة البحث")
   modeToggle.addEventListener("click", () => location.assign("research/"))
   copyButton.hidden = false
+  checkButton.hidden = false
+  checkButton.addEventListener("click", checkShownText)
   copyButton.addEventListener("click", () =>
     navigator.clipboard.writeText(citedText(shownText)).then(
       () => (noticeElement.value = "نُسخ النص مع مراجعه. ألصقه حيث تكتب."),
       () => (noticeElement.value = "تعذّر النسخ: المتصفح منع الوصول إلى الحافظة."),
     ),
   )
+}
+
+const VERDICT_LABELS: Record<Exclude<Verdict, "SUPPORTED">, string> = { PARTIAL: "مدعومة جزئياً", UNSUPPORTED: "غير مدعومة", MISPLACED: "مرجعها في غير موضعه" }
+const OPENING_WORDS = 6
+
+/** Asks the model whether each shown sentence follows from the words it cites, and lists in the notice the sentences that do not. One paid request per press. */
+async function checkShownText() {
+  if (!shownText.trim()) return void (noticeElement.value = "لا يوجد نص لتدقيقه بعد.")
+  checkButton.disabled = true
+  noticeElement.value = "يدقّق كل جملة مقابل اقتباسها…"
+  try {
+    const findings = await checkSupport(citedText(shownText), new AbortController().signal)
+    const faults = findings.filter(({ verdict }) => verdict !== "SUPPORTED")
+    const summary = `التدقيق: ${findings.length - faults.length} جملة مدعومة من ${findings.length}.`
+    const details = faults.map(({ sentence, verdict, note }) => {
+      const opening = sentence.split(/\s+/).slice(0, OPENING_WORDS).join(" ")
+      return `• «${opening}…»: ${VERDICT_LABELS[verdict as keyof typeof VERDICT_LABELS]}${note && `. ${note}`}`
+    })
+    noticeElement.value = [summary, ...details].join("\n")
+  } catch (error) {
+    noticeElement.value = `تعذّر التدقيق: ${error instanceof Error ? error.message : error}`
+  } finally {
+    checkButton.disabled = false
+  }
 }
 
 function prepareWords() {

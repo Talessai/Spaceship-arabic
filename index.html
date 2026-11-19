@@ -564,6 +564,9 @@
         font-size: var(--hud-size);
         line-height: var(--hud-line);
         unicode-bidi: plaintext;
+        white-space: pre-line;
+        max-height: 45vh;
+        overflow-y: auto;
 
         &:empty {
           display: none;
@@ -648,6 +651,7 @@
       #mode-toggle,
       #sound-toggle,
       #copy-text,
+      #check-text,
       #research-link,
       #extra-link {
         padding: 0 var(--gap);
@@ -938,7 +942,8 @@
         #extra-link {
           display: none;
         }
-        #copy-text {
+        #copy-text,
+        #check-text {
           order: 1;
         }
       }
@@ -969,6 +974,7 @@
       <output id="status" aria-live="off"></output>
       <button id="sound-toggle" type="button" aria-pressed="true" aria-label="الصوت">♪<b>يعمل</b></button>
       <a id="extra-link" href="extra/style-1.html">إضافات</a>
+      <button id="check-text" type="button" hidden>تدقيق</button>
       <button id="copy-text" type="button" hidden>نسخ</button>
       <a id="research-link" href="research/">بحث</a>
     </footer>
