@@ -16,7 +16,9 @@ const PASSAGES_PER_REQUEST = 10
 /** With an empty instruction, the end of the draft is what the passages are searched by. */
 const QUERY_TAIL_CHARS = 400
 
-const isLive = new URLSearchParams(location.search).get("live") === "true"
+/** The model writes whenever a key is saved, however the page was reached; `?sim=true` asks for the simulator, and `?live=true` for the model before a key is saved. */
+const query = new URLSearchParams(location.search)
+const isLive = query.get("sim") !== "true" && (query.get("live") === "true" || Boolean(localStorage.getItem(KEY_STORAGE)))
 const writer = isLive ? liveWriter : simulatedWriter
 
 const draft = $<HTMLTextAreaElement>("#draft")
@@ -69,6 +71,7 @@ $<HTMLFormElement>("#key-form").addEventListener("submit", (event) => {
   localStorage.setItem(KEY_STORAGE, key)
   form.reset()
   showKey()
+  if (!isLive && query.get("sim") !== "true") location.reload()
 })
 
 forgetKey.addEventListener("click", () => {
@@ -117,6 +120,7 @@ function reportStorageError() {
 function showKey() {
   const isStored = Boolean(localStorage.getItem(KEY_STORAGE))
   keyStatus.value = isStored ? "المفتاح محفوظ في هذا المتصفح." : "لا يوجد مفتاح محفوظ."
+  $("#key summary").textContent = isStored ? "مفتاح النموذج: محفوظ" : "مفتاح النموذج: غير محفوظ"
   forgetKey.hidden = !isStored
 }
 
@@ -269,8 +273,8 @@ function restoreDraft() {
 function showMode() {
   const mode = $<HTMLAnchorElement>("#mode")
   mode.textContent = isLive ? "النموذج يعمل ← العودة إلى المحاكاة" : "محاكاة ← تشغيل النموذج"
-  mode.href = isLive ? "?" : "?live=true"
-  $("#key").hidden = !isLive
+  mode.href = isLive ? "?sim=true" : "?live=true"
+  $<HTMLDetailsElement>("#key").open = !localStorage.getItem(KEY_STORAGE)
   $("#controls-note").textContent = isLive ? "" : "في وضع المحاكاة تُنسخ الجمل من المصادر كما هي، فالتوجيه لا يغيّرها. شغّل النموذج لترى أثره."
 }
 

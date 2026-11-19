@@ -29,7 +29,7 @@ Run `npm run dev -- --port 5280`, then drive the page in sim mode with Playwrigh
 
 ## Research page (`research/`)
 
-A page for writing research from the user's own sources only. It is also where sources, the Claude key and the topic are set for the tool's research mode.
+A page for writing research from the user's own sources only. It is also where sources, the Claude key and the topic are set for the tool's research mode. The model writes whenever a key is saved, however the page was reached; `?sim=true` asks for the simulated writer. The key section is always shown, and its summary says whether a key is saved.
 
 ### Research mode of the tool (`?research=true`)
 
