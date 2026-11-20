@@ -48,6 +48,21 @@ export function citedText(text: string) {
   return list.length ? `${prose}\n\nالمراجع\n${list.join("\n")}` : prose
 }
 
+/** Everything of the researcher's own work kept in this browser, as one value to save to a file and bring back, here or on another device. */
+export function backup() {
+  return { kind: "research-backup", draft: storedDraft(), topic: storedTopic(), toolText: storedToolText() }
+}
+
+/** Puts a backup back in place of what is stored. Returns false, changing nothing, for a file that is not one. */
+export function restore(saved: unknown) {
+  const { kind, draft, topic, toolText } = (saved ?? {}) as Partial<ReturnType<typeof backup>>
+  if (kind !== "research-backup" || typeof draft?.text !== "string" || !Array.isArray(draft.references)) return false
+  storeDraft(draft)
+  storeTopic(topic ?? "")
+  storeToolText(toolText ?? "")
+  return true
+}
+
 /** What the tool is asked to write about, set on the research page. */
 export const storedTopic = () => localStorage.getItem(TOPIC_STORAGE) ?? ""
 export const storeTopic = (topic: string) => localStorage.setItem(TOPIC_STORAGE, topic)

@@ -4,6 +4,12 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>مختبر البحث</title>
+    <link rel="icon" href="../icon.svg" />
+    <link rel="manifest" href="../manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="../icon-192.png" />
+    <meta name="theme-color" content="#000000" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
     <style>
       :root {
         color-scheme: dark;
@@ -275,6 +281,14 @@
         <button id="take-tool-text" type="button">أضف نص الأداة إلى المسودة</button>
         <button id="download" type="button">نزّل المسودة</button>
         <button id="clear" type="button">امسح المسودة والمراجع</button>
+      </div>
+      <div class="actions">
+        <button id="backup" type="button">نسخة احتياطية</button>
+        <label>
+          استعادة نسخة
+          <input id="restore" type="file" accept=".json,application/json" />
+        </label>
+        <small>تحفظ المسودة والمراجع والموضوع في ملف، وتنقلها بين أجهزتك. المصادر والمفتاح لا تدخل فيها.</small>
       </div>
     </main>
 

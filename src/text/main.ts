@@ -108,7 +108,7 @@ const futureKnobs = createFutureKnobs({
   tunedLinkPath: $<SVGPathElement>("#future-tuned-link"),
   hud: $<SVGGElement>("#future-hud"),
   source: research?.dimension ?? (isLive ? liveDimension : simulatedDimension),
-  realization: isLive ? liveRealization : simulatedRealization,
+  realization: research?.realization ?? (isLive ? liveRealization : simulatedRealization),
   textElement: element,
   context: () => ({ text: shownText, leads: attention.leads() }),
   onChange: invalidateFuture,

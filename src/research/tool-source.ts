@@ -1,6 +1,7 @@
 import type { AttentionSource } from "../text/attention.ts"
 import { strengthLevelOf, valueOf, type Dimension, type DimensionSource } from "../text/dimension.ts"
 import { wordSpans } from "../text/segments.ts"
+import type { RealizationSource } from "../text/realization.ts"
 import type { TextSource } from "../text/text-stream.ts"
 import { searchTerms } from "./arabic.ts"
 import { referenceMarks, storedTopic } from "./draft-store.ts"
@@ -166,5 +167,8 @@ export function createResearchSources(onNotice: (notice: string) => void) {
     yield* AXES.filter(({ name }) => !taken.some((dimension) => dimension.name === name))
   }
 
-  return { text, attention, dimension }
+  /** Nothing here measures whether a sentence delivers a control, so no confidence is reported: a knob shows no percentage and stays where it steers. */
+  const realization: RealizationSource = async function* () {}
+
+  return { text, attention, dimension, realization }
 }

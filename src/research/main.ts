@@ -1,10 +1,10 @@
 import "@fontsource-variable/jetbrains-mono/wght.css"
 import "@fontsource/ibm-plex-sans-arabic/400.css"
 import "@fontsource/ibm-plex-sans-arabic/600.css"
-import { $ } from "../dom.ts"
+import { $, downloadJson } from "../dom.ts"
 import { KEY_STORAGE } from "../llm/claude.ts"
 import { controlsOf } from "./controls.ts"
-import { referenceMarks, storedDraft, storedToolText, storeDraft, storeTopic } from "./draft-store.ts"
+import { backup, referenceMarks, restore, storedDraft, storedToolText, storedTopic, storeDraft, storeTopic } from "./draft-store.ts"
 import { liveWriter } from "./live-writer.ts"
 import { createIndex } from "./retrieval.ts"
 import { markdownOf } from "./pdf-to-markdown.ts"
@@ -100,6 +100,21 @@ $("#clear").addEventListener("click", () => {
   draft.value = ""
   storeDraft({ text: "", references: [] })
   showReferences()
+})
+$("#backup").addEventListener("click", () => {
+  saveDraft()
+  downloadJson("research-backup.json", backup())
+})
+$<HTMLInputElement>("#restore").addEventListener("change", async ({ currentTarget }) => {
+  const input = currentTarget as HTMLInputElement
+  const [file] = input.files ?? []
+  if (!file) return
+  const isRestored = restore(await file.text().then(JSON.parse, () => undefined))
+  input.value = ""
+  if (!isRestored) return void (status.value = "هذا الملف ليس نسخة احتياطية من هذه الأداة.")
+  restoreDraft()
+  $<HTMLInputElement>("[name=instruction]").value = storedTopic()
+  status.value = "استُعيدت المسودة والمراجع والموضوع."
 })
 $("#take-tool-text").addEventListener("click", () => {
   draft.value = [draft.value.trimEnd(), storedToolText()].filter(Boolean).join("\n\n")
