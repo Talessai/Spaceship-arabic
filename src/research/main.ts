@@ -5,7 +5,8 @@ import { $, downloadJson } from "../dom.ts"
 import { KEY_STORAGE } from "../llm/claude.ts"
 import { controlsOf } from "./controls.ts"
 import { backup, referenceMarks, restore, storedDraft, storedToolText, storedTopic, storeDraft, storeTopic } from "./draft-store.ts"
-import { liveWriter } from "./live-writer.ts"
+import { DEFAULT_LOCAL_URL, storedLocalModel, storeLocalModel } from "../llm/local.ts"
+import { activeModel, storedProvider, storeProvider, type Provider } from "./model.ts"
 import { createIndex } from "./retrieval.ts"
 import { markdownOf } from "./pdf-to-markdown.ts"
 import { simulatedWriter } from "./simulated-writer.ts"
@@ -21,8 +22,8 @@ const QUERY_TAIL_CHARS = 400
 
 /** The model writes whenever a key is saved, however the page was reached; `?sim=true` asks for the simulator, and `?live=true` for the model before a key is saved. */
 const query = new URLSearchParams(location.search)
-const isLive = query.get("sim") !== "true" && (query.get("live") === "true" || Boolean(localStorage.getItem(KEY_STORAGE)))
-const writer = isLive ? liveWriter : simulatedWriter
+const isLive = query.get("sim") !== "true" && (query.get("live") === "true" || storedProvider() !== undefined)
+const writer = isLive ? activeModel().write : simulatedWriter
 
 const draft = $<HTMLTextAreaElement>("#draft")
 const sourceList = $<HTMLUListElement>("#source-list")
@@ -79,6 +80,24 @@ $<HTMLFormElement>("#key-form").addEventListener("submit", (event) => {
   form.reset()
   showKey()
   if (!isLive && query.get("sim") !== "true") location.reload()
+})
+
+$<HTMLFormElement>("#local-form").addEventListener("submit", (event) => {
+  event.preventDefault()
+  const data = new FormData(event.currentTarget as HTMLFormElement)
+  const field = (name: string) => String(data.get(name)).trim()
+  storeLocalModel({ baseUrl: field("baseUrl") || DEFAULT_LOCAL_URL, model: field("model"), apiKey: field("apiKey") })
+  storeProvider("local")
+  location.reload()
+})
+$("#forget-local").addEventListener("click", () => {
+  storeLocalModel(undefined)
+  storeProvider("claude")
+  location.reload()
+})
+$<HTMLSelectElement>("#provider").addEventListener("change", ({ currentTarget }) => {
+  storeProvider((currentTarget as HTMLSelectElement).value as Provider)
+  location.reload()
 })
 
 forgetKey.addEventListener("click", () => {
@@ -312,7 +331,16 @@ function restoreDraft() {
 
 function showMode() {
   const mode = $<HTMLAnchorElement>("#mode")
-  mode.textContent = isLive ? "النموذج يعمل ← العودة إلى المحاكاة" : "محاكاة ← تشغيل النموذج"
+  const local = storedLocalModel()
+  const running = storedProvider() === "local" ? `يكتب النموذج المحلي ${local?.model ?? ""}` : "يكتب Claude"
+  mode.textContent = isLive ? `${running} ← العودة إلى المحاكاة` : "محاكاة ← تشغيل النموذج"
+  const form = $<HTMLFormElement>("#local-form")
+  ;(form.elements.namedItem("baseUrl") as HTMLInputElement).value = local?.baseUrl ?? DEFAULT_LOCAL_URL
+  ;(form.elements.namedItem("model") as HTMLInputElement).value = local?.model ?? ""
+  $("#local summary").textContent = local?.model ? `نموذج محلي مفتوح المصدر: ${local.model}` : "نموذج محلي مفتوح المصدر"
+  $("#forget-local").hidden = !local?.model
+  $("#provider-choice").hidden = !(local?.model && localStorage.getItem(KEY_STORAGE))
+  $<HTMLSelectElement>("#provider").value = storedProvider() ?? "claude"
   mode.href = isLive ? "?sim=true" : "?live=true"
   $<HTMLDetailsElement>("#key").open = !localStorage.getItem(KEY_STORAGE)
   $("#controls-note").textContent = isLive ? "" : "في وضع المحاكاة تُنسخ الجمل من المصادر كما هي، فالتوجيه لا يغيّرها. شغّل النموذج لترى أثره."

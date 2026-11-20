@@ -207,6 +207,33 @@
         <output id="key-status"></output>
         <button id="forget-key" type="button" hidden>احذف المفتاح</button>
       </details>
+      <details id="local">
+        <summary>نموذج محلي مفتوح المصدر</summary>
+        <form id="local-form" autocomplete="off">
+          <label>
+            عنوان الخادم
+            <input name="baseUrl" dir="ltr" placeholder="http://localhost:11434/v1" />
+          </label>
+          <label>
+            اسم النموذج كما يعرفه الخادم
+            <input name="model" dir="ltr" required />
+          </label>
+          <label>
+            مفتاح، إن طلبه الخادم
+            <input name="apiKey" type="password" dir="ltr" />
+          </label>
+          <button>احفظ واستخدمه</button>
+        </form>
+        <button id="forget-local" type="button" hidden>احذف النموذج المحلي</button>
+        <small>يعمل مع أي خادم على جهازك يتكلم صيغة OpenAI، مثل Ollama و LM Studio. النص لا يغادر جهازك.</small>
+      </details>
+      <label id="provider-choice" hidden>
+        النموذج المستخدم
+        <select id="provider">
+          <option value="claude">Claude</option>
+          <option value="local">المحلي</option>
+        </select>
+      </label>
     </aside>
 
     <main>
