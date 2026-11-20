@@ -6,6 +6,7 @@ import { $ } from "../dom.ts"
 import { centeredAt, type Point } from "../point.ts"
 import { citedText, storeToolText } from "../research/draft-store.ts"
 import { checkSupport, type Verdict } from "../research/live-writer.ts"
+import { activeModel } from "../research/model.ts"
 import { createResearchSources } from "../research/tool-source.ts"
 import { createAttentionKnobs } from "./attention-knobs.ts"
 import { caretAt, isAhead, pointAt, type Caret, type TextMetrics } from "./caret.ts"
@@ -382,7 +383,7 @@ async function checkShownText() {
   checkButton.disabled = true
   noticeElement.value = "يدقّق كل جملة مقابل اقتباسها…"
   try {
-    const findings = await checkSupport(citedText(shownText), new AbortController().signal)
+    const findings = await checkSupport(citedText(shownText), new AbortController().signal, activeModel().check)
     const faults = findings.filter(({ verdict }) => verdict !== "SUPPORTED")
     const summary = `التدقيق: ${findings.length - faults.length} جملة مدعومة من ${findings.length}.`
     const details = faults.map(({ sentence, verdict, note }) => {

@@ -70,6 +70,9 @@ export type Verdict = "SUPPORTED" | "PARTIAL" | "UNSUPPORTED" | "MISPLACED"
 /** What the check found for one sentence of the draft, by its position. */
 export type Finding = { sentence: string; verdict: Verdict; note: string }
 
+/** Sends a system prompt and a user message to a model and returns its whole reply. Planning and checking are written against this, so any model can do them. */
+export type Ask = (system: string, user: string, signal: AbortSignal) => Promise<string>
+
 /** One planned paragraph: what it establishes and the passages it rests on. */
 export type Point = { claim: string; passages: Passage[] }
 
@@ -96,25 +99,9 @@ export const liveWriter: Writer = async function* (request, signal) {
 }
 
 /** Reads the passages once and lays out the paragraphs they can support on the topic, with what the topic asks that they do not cover. */
-export async function planOutline(topic: string, passages: Passage[], signal: AbortSignal): Promise<{ points: Point[]; missing: string }> {
+export async function planOutline(topic: string, passages: Passage[], signal: AbortSignal, ask: Ask): Promise<{ points: Point[]; missing: string }> {
   const numbered = passages.map(({ source, page, text }, i) => `[${i + 1}] (${source}، ص ${page}) ${text}`).join("\n\n")
-  const message = await clientOrThrow()
-    .beta.messages.stream(
-      {
-        model: MODEL,
-        max_tokens: 16000,
-        output_config: { effort: "low" },
-        betas: ["server-side-fallback-2026-07-01"],
-        fallbacks: "default",
-        system: PLAN_PROMPT,
-        messages: [{ role: "user", content: `PASSAGES\n${numbered}\n\nTOPIC\n${topic}` }],
-      },
-      { signal },
-    )
-    .finalMessage()
-  if (message.stop_reason === "refusal") throw new Error("رفض النموذج هذا الطلب.")
-
-  const lines = message.content.flatMap((block) => (block.type === "text" ? block.text.split("\n") : []))
+  const lines = (await ask(PLAN_PROMPT, `PASSAGES\n${numbered}\n\nTOPIC\n${topic}`, signal)).split("\n")
   /** Read loosely: a model may number the lines, bold the label or bracket the passage numbers. */
   const points = lines.flatMap((line): Point[] => {
     const [, claim, numbers] = line.match(/POINT[\s*_]*:[\s*_]*(.+?)\s*\|(.+)$/) ?? []
@@ -130,33 +117,39 @@ export async function planOutline(topic: string, passages: Passage[], signal: Ab
  * Asks whether each sentence of `citedDraft` follows from the quoted words of the references it cites. This is the check the code cannot make:
  * `checked` only finds a quote in a passage, so a reference attached to the wrong sentence passes it.
  */
-export async function checkSupport(citedDraft: string, signal: AbortSignal): Promise<Finding[]> {
+export async function checkSupport(citedDraft: string, signal: AbortSignal, ask: Ask): Promise<Finding[]> {
   const [body] = citedDraft.split(/\n\s*المراجع\s*\n/)
   const sentences = [...body.matchAll(/\s*(.+?(?:\s*\[(?:\d+|؟)\])+)/gs)].map(([, sentence]) => sentence.trim())
   if (!sentences.length) return []
   const numbered = sentences.map((sentence, i) => `${i + 1}. ${sentence}`).join("\n")
-  const message = await clientOrThrow()
-    .beta.messages.stream(
-      {
-        model: MODEL,
-        max_tokens: 16000,
-        output_config: { effort: "medium" },
-        betas: ["server-side-fallback-2026-07-01"],
-        fallbacks: "default",
-        system: CHECK_PROMPT,
-        messages: [{ role: "user", content: `DRAFT\n${numbered}\n\n${citedDraft.slice(body.length).trim()}` }],
-      },
-      { signal },
-    )
-    .finalMessage()
-  if (message.stop_reason === "refusal") throw new Error("رفض النموذج هذا الطلب.")
-
-  const lines = message.content.flatMap((block) => (block.type === "text" ? block.text.split("\n") : []))
+  const lines = (await ask(CHECK_PROMPT, `DRAFT\n${numbered}\n\n${citedDraft.slice(body.length).trim()}`, signal)).split("\n")
   return lines.flatMap((line): Finding[] => {
     const [, number, verdict, note] = line.match(/^\W*(\d+)[\s.*_]*\|[\s*_]*(SUPPORTED|PARTIAL|UNSUPPORTED|MISPLACED)[\s*_]*(?:\|\s*(.*))?$/) ?? []
     const sentence = sentences[Number(number) - 1]
     return sentence ? [{ sentence, verdict: verdict as Verdict, note: note?.trim() ?? "" }] : []
   })
+}
+
+/** Sends one request to Claude at the given effort and returns the whole reply. */
+export function claudeAsk(effort: "low" | "medium"): Ask {
+  return async (system, user, signal) => {
+    const message = await clientOrThrow()
+      .beta.messages.stream(
+        {
+          model: MODEL,
+          max_tokens: 16000,
+          output_config: { effort },
+          betas: ["server-side-fallback-2026-07-01"],
+          fallbacks: "default",
+          system,
+          messages: [{ role: "user", content: user }],
+        },
+        { signal },
+      )
+      .finalMessage()
+    if (message.stop_reason === "refusal") throw new Error("رفض النموذج هذا الطلب.")
+    return message.content.map((block) => (block.type === "text" ? block.text : "")).join("")
+  }
 }
 
 function clientOrThrow() {

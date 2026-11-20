@@ -5,16 +5,16 @@ import type { RealizationSource } from "../text/realization.ts"
 import type { TextSource } from "../text/text-stream.ts"
 import { searchTerms } from "./arabic.ts"
 import { referenceMarks, storedTopic } from "./draft-store.ts"
-import { liveWriter, planOutline, type Point } from "./live-writer.ts"
+import { planOutline, type Point } from "./live-writer.ts"
+import { activeModel } from "./model.ts"
 import { createIndex } from "./retrieval.ts"
 import { storedSources } from "./source-store.ts"
 import { checked } from "./writer.ts"
 
 /**
- * The outline is planned from every passage while the library is this small, since a search by the topic's words misses what the sources say in
- * other words ("الأب" does not find "والده"). A larger library is cut to the passages nearest the topic, a few a page.
+ * The outline is planned from every passage while the library fits the model (`ResearchModel.planPassages`), since a search by the topic's words
+ * misses what the sources say in other words ("الأب" does not find "والده"). A larger library is cut to the passages nearest the topic, a few a page.
  */
-const PLAN_PASSAGES = 300
 const PASSAGES_PER_PAGE = 3
 /** Ends a sentence that no passage backs, in place of reference numbers. */
 const UNSUPPORTED_MARK = "[؟]"
@@ -100,7 +100,7 @@ export function createResearchSources(onNotice: (notice: string) => void) {
         let paragraph = ""
         let unsupported = 0
         let gap = ""
-        for await (const result of liveWriter(
+        for await (const result of activeModel().write(
           { draft: prefix, instruction: topic, passages: point.passages, pinned: 0, leads, controls, point: point.claim, outline },
           signal,
         )) {
@@ -127,6 +127,7 @@ export function createResearchSources(onNotice: (notice: string) => void) {
 
   /** Plans from the whole library when it is small, else from the passages nearest the topic, and notes the sources no point rests on. */
   async function planFor(topic: string, signal: AbortSignal) {
+    const model = activeModel()
     const all = (await sources).flatMap(({ passages }) => passages)
     const perPage = new Map<string, number>()
     const nearest = (await index)
@@ -137,9 +138,9 @@ export function createResearchSources(onNotice: (notice: string) => void) {
         perPage.set(`${source}\n${page}`, count)
         return count <= PASSAGES_PER_PAGE
       })
-      .slice(0, PLAN_PASSAGES)
-    const passages = all.length <= PLAN_PASSAGES ? all : nearest
-    const { points, missing } = passages.length ? await planOutline(topic, passages, signal) : { points: [], missing: "" }
+      .slice(0, model.planPassages)
+    const passages = all.length <= model.planPassages ? all : nearest
+    const { points, missing } = passages.length ? await planOutline(topic, passages, signal, model.plan) : { points: [], missing: "" }
     const used = new Set(points.flatMap(({ passages }) => passages.map(({ source }) => source.replace(FOOTNOTE_LABEL, ""))))
     const unused = (await sources).map(({ title }) => title).filter((title) => !used.has(title))
     return { topic, points, missing, unused, written: [] as string[] }
